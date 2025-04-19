@@ -666,3 +666,12 @@ class TrendSnipper {
     });
   }
 }
+
+const trendSnipper = new TrendSnipper();
+
+console.log('Starting TrendSnipper...');
+trendSnipper.start().catch(error => {
+  console.error(`Fatal error: ${error.message}`);
+  console.error(error.stack);
+  process.exit(1);
+});
