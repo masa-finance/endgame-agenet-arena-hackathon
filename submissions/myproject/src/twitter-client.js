@@ -1,18 +1,53 @@
 import { Scraper, SearchMode } from 'agent-twitter-client';
 import config from './config.js';
 import logger from './utils/logger.js';
+import CookieManager from './CookieManager.js';
 
 class TwitterClient {
   constructor() {
     this.scraper = new Scraper();
     this.isAuthenticated = false;
+    this.cookieManager = new CookieManager();
   }
 
-  // Twitter authentication
+  // Twitter authentication with cookie support
   async authenticate() {
     try {
       if (this.isAuthenticated) return true;
 
+      // Try to load and use existing cookies first
+      const cookies = this.cookieManager.loadCookies();
+      
+      if (cookies) {
+        logger.info('Found saved cookies, attempting to use them...');
+        
+        try {
+          // Format cookies properly for the Twitter client
+          const formattedCookies = this.cookieManager.formatCookiesForTwitterClient(cookies);
+          
+          if (formattedCookies && formattedCookies.length > 0) {
+            // Set cookies with error handling
+            await this.scraper.setCookies(formattedCookies);
+            
+            // Verify if cookies are still valid
+            this.isAuthenticated = await this.scraper.isLoggedIn();
+            
+            if (this.isAuthenticated) {
+              logger.info('Authentication successful using saved cookies');
+              return true;
+            } else {
+              logger.warn('Saved cookies are invalid or expired, proceeding with login');
+            }
+          } else {
+            logger.warn('Cookies could not be properly formatted, proceeding with login');
+          }
+        } catch (cookieError) {
+          logger.error(`Error setting cookies: ${cookieError.message}`);
+          logger.warn('Will proceed with regular authentication');
+        }
+      }
+
+      // Regular authentication if cookies aren't available or are invalid
       const { username, password, email, apiKey, apiSecretKey, accessToken, accessTokenSecret } = config.twitter;
       
       // If API keys are provided, use complete authentication (required for certain features)
@@ -27,7 +62,24 @@ class TwitterClient {
       
       if (this.isAuthenticated) {
         logger.info('Twitter authentication successful');
-        return true;
+        
+        try {
+          // Save cookies for future use
+          const newCookies = await this.scraper.getCookies();
+          
+          if (newCookies) {
+            await this.cookieManager.saveCookies(newCookies);
+            logger.info('New cookies saved for future sessions');
+          } else {
+            logger.warn('Could not retrieve cookies after authentication');
+          }
+          
+          return true;
+        } catch (cookieError) {
+          logger.error(`Error saving cookies: ${cookieError.message}`);
+          // Still return true as authentication was successful
+          return true;
+        }
       } else {
         logger.error('Twitter authentication failed');
         return false;
@@ -36,6 +88,28 @@ class TwitterClient {
       logger.error(`Twitter authentication error: ${error.message}`);
       return false;
     }
+  }
+
+  // Clear cookies and session data
+  async logout() {
+    try {
+      await this.scraper.logout();
+      this.cookieManager.deleteCookies();
+      this.isAuthenticated = false;
+      logger.info('Successfully logged out and cleared cookies');
+      return true;
+    } catch (error) {
+      logger.error(`Error during logout: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Force a new authentication (ignore cookies)
+  async forceReauthenticate() {
+    this.isAuthenticated = false;
+    await this.scraper.clearCookies();
+    this.cookieManager.deleteCookies();
+    return await this.authenticate();
   }
 
   // Collect tweets from configured hashtags
@@ -115,6 +189,26 @@ class TwitterClient {
     } catch (error) {
       logger.error(`Error retrieving global trends: ${error.message}`);
       return [];
+    }
+  }
+
+  // Check if cookies are still valid
+  async validateCookies() {
+    if (!this.cookieManager.cookiesExist()) {
+      return false;
+    }
+    
+    const cookies = this.cookieManager.loadCookies();
+    if (!cookies) return false;
+    
+    try {
+      // Format cookies properly for validation
+      const formattedCookies = this.cookieManager.formatCookiesForTwitterClient(cookies);
+      await this.scraper.setCookies(formattedCookies);
+      return await this.scraper.isLoggedIn();
+    } catch (error) {
+      logger.error(`Error validating cookies: ${error.message}`);
+      return false;
     }
   }
 }
