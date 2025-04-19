@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
-import config from './config.js';
-import logger from './utils/logger.js';
+import config from '../config.js';
+import logger from '../utils/logger.js';
 
 class OpenAIClient {
   constructor() {

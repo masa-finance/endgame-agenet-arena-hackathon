@@ -3,7 +3,7 @@ import config from './config.js';
 import logger from './utils/logger.js';
 import openaiClient from './ai/openai-client.js';
 
-class TrendDetector {
+export default class TrendDetector {
   constructor() {
     this.previousTermFrequency = new Map();
     this.currentTermFrequency = new Map();

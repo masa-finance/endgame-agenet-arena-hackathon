@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import logger from './utils/logger.js';
-import config from './config.js';
+import logger from '../utils/logger.js';
+import config from '../config.js';
 
 class McpClient {
   constructor() {
