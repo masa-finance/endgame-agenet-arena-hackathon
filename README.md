@@ -16,7 +16,7 @@ TrendSnipper is a non-conversational AI agent that automatically detects emergin
 - **For Trend Analysts**: Access objective data on the evolution of online conversations
 - **For Businesses**: Track emerging discussions in your industry
 
-## 🧠 How the Agent Works
+## 🧠 How the Agent Works 
 
 1. **Data Collection**: The agent collects tweets from configured hashtags and influential accounts
 2. **Trend Analysis**: An algorithm identifies terms with significantly increasing frequency
@@ -40,7 +40,7 @@ TrendSnipper is a non-conversational AI agent that automatically detects emergin
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/Naesmal/endgame-agenet-arena-hackathon.git
+git clone https://github.com/Naesmal/trendsnipper.git
 cd trendsnipper
 ```
 
