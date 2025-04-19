@@ -5,7 +5,7 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables
+// Load environment variables from .env file
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 export default {
@@ -27,25 +27,35 @@ export default {
     maxTweetsPerSource: 100
   },
   analysis: {
-    // Minimum occurrences to consider a term as a trend
+    // Minimum number of times a term must appear to be considered a trend
     minOccurrences: 3,
-    // Growth threshold to consider a trend as emerging (%)
+    // Growth percentage threshold to detect an emerging trend
     growthThreshold: 50,
-    // Words to exclude from analysis (stopwords will also be included)
+    // Terms to exclude from analysis (stopwords will also be excluded)
     excludedTerms: ['RT', 'http', 'https', 'amp', 't.co']
   },
   scheduler: {
-    // Cron format for scheduling executions (here: every 4 hours)
+    // Cron expression for periodic execution (every 4 hours)
     cronSchedule: '0 */4 * * *'
   },
   mcp: {
     // MCP server configuration
     server: {
       name: 'TrendSnipperMCP',
-      version: '1.0.0'
-    },
-    transport: {
+      version: '1.0.0',
       port: parseInt(process.env.MCP_PORT || '3000')
+    },
+    // MCP client configuration
+    client: {
+      // External MCP servers to connect to
+      externalServers: [
+        // Example external server:
+        // {
+        //   id: "weather",
+        //   command: "npx",
+        //   args: ["-y", "@modelcontextprotocol/server-weather"]
+        // }
+      ]
     }
   }
 };

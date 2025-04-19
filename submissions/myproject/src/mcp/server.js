@@ -9,11 +9,16 @@ class MCPTrendServer {
   constructor() {
     this.server = new McpServer({
       name: config.mcp.server.name,
-      version: config.mcp.server.version
+      version: config.mcp.server.version,
+      capabilities: {
+        resources: {},
+        tools: {},
+        prompts: {}  // Ajout de la capacité de prompts
+      }
     });
     
     this.app = express();
-    this.port = config.mcp.transport.port;
+    this.port = config.mcp.server.port;
     this.transport = null;
     this.currentTrends = [];
   }
@@ -68,6 +73,45 @@ class MCPTrendServer {
         }
       }
     );
+
+    // Resource for historical trends
+    this.server.resource(
+      "historical-trends",
+      "trends://history/{date}",
+      async (uri, { date }) => {
+        try {
+          // Ici, vous pourriez implémenter une logique pour récupérer des tendances historiques
+          // Pour cet exemple, nous renvoyons simplement un message
+          return {
+            contents: [{
+              uri: uri.href,
+              text: `Historical trends for ${date} are not yet available.`
+            }]
+          };
+        } catch (error) {
+          logger.error(`Error accessing historical trends: ${error.message}`);
+          throw error;
+        }
+      }
+    );
+  }
+
+  // Register MCP prompts (nouvelle fonctionnalité)
+  registerPrompts() {
+    // Prompt pour l'analyse de tendances
+    this.server.prompt(
+      "analyze-trend",
+      { trend: "string" },
+      ({ trend }) => ({
+        messages: [{
+          role: "user",
+          content: {
+            type: "text",
+            text: `Analyze this emerging trend: ${trend}. What might be the factors driving its popularity? What broader implications might it have? Who are the key influencers or thought leaders associated with it?`
+          }
+        }]
+      })
+    );
   }
 
   // Configure Express routes for SSE transport
@@ -89,11 +133,28 @@ class MCPTrendServer {
   // Start the Express server
   async startServer() {
     return new Promise((resolve) => {
-      this.app.listen(this.port, () => {
+      this.httpServer = this.app.listen(this.port, () => {
         logger.info(`MCP server listening on port ${this.port}`);
         resolve();
       });
     });
+  }
+
+  // Stop the server
+  async stop() {
+    if (this.httpServer) {
+      return new Promise((resolve, reject) => {
+        this.httpServer.close((err) => {
+          if (err) {
+            logger.error(`Error stopping MCP server: ${err.message}`);
+            reject(err);
+          } else {
+            logger.info('MCP server stopped');
+            resolve();
+          }
+        });
+      });
+    }
   }
 }
 

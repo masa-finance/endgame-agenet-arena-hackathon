@@ -4,6 +4,7 @@ import scheduler from './utils/scheduler.js';
 import twitterClient from './twitter-client.js';
 import trendDetector from './trend-detector.js';
 import mcpServer from './mcp/server.js';
+import mcpClient from './mcp/mcp-client.js';
 
 class TrendSnipper {
   constructor() {
@@ -25,6 +26,9 @@ class TrendSnipper {
       // MCP server initialization
       await mcpServer.initialize();
       
+      // MCP client initialization and connections to external servers
+      await this.initializeMcpClient();
+      
       // Schedule trend detection
       scheduler.schedule(
         'trend-detection',
@@ -41,6 +45,34 @@ class TrendSnipper {
     } catch (error) {
       logger.error(`Error starting TrendSnipper: ${error.message}`);
       process.exit(1);
+    }
+  }
+
+  // Initialize MCP client and connect to external servers
+  async initializeMcpClient() {
+    try {
+      const { externalServers } = config.mcp.client;
+      
+      if (!externalServers || externalServers.length === 0) {
+        logger.info('No external MCP servers configured, skipping client initialization');
+        return;
+      }
+      
+      logger.info(`Initializing MCP client with ${externalServers.length} external servers...`);
+      
+      for (const server of externalServers) {
+        const { id, command, args } = server;
+        const connected = await mcpClient.connectToServer(id, command, args);
+        
+        if (connected) {
+          logger.info(`Successfully connected to external MCP server: ${id}`);
+        } else {
+          logger.warn(`Failed to connect to external MCP server: ${id}`);
+        }
+      }
+    } catch (error) {
+      logger.error(`Error initializing MCP client: ${error.message}`);
+      throw error;
     }
   }
 
@@ -84,6 +116,9 @@ class TrendSnipper {
         
         logger.info('Publishing trends on Twitter...');
         await twitterClient.publishTrends(trendReport);
+        
+        // 5. Optionnel: Utiliser les serveurs MCP externes pour enrichir l'analyse
+        await this.enrichTrendsWithExternalMcp(emergingTrends);
       } else {
         logger.info('No emerging trends detected in this cycle');
       }
@@ -91,6 +126,36 @@ class TrendSnipper {
       logger.info('Trend detection cycle completed successfully');
     } catch (error) {
       logger.error(`Error during trend detection cycle: ${error.message}`);
+    }
+  }
+
+  // Enrich trend analysis with external MCP servers
+  async enrichTrendsWithExternalMcp(trends) {
+    // Si aucun serveur externe n'est connecté, on ignore cette étape
+    if (mcpClient.connectedServers.size === 0) return;
+    
+    logger.info('Enriching trends with external MCP servers...');
+    
+    try {
+      for (const trend of trends) {
+        const term = trend.term;
+        
+        // Exemple d'utilisation d'un serveur MCP externe "brave-search"
+        // Ceci est un exemple - vous devrez l'adapter selon les serveurs MCP auxquels vous vous connectez
+        if (mcpClient.connectedServers.has('brave-search')) {
+          try {
+            const result = await mcpClient.callTool('search', { query: term });
+            logger.info(`Enriched trend "${term}" with external search data`);
+            
+            // Ici, vous pourriez stocker ou traiter les résultats enrichis
+            trend.externalData = result;
+          } catch (toolError) {
+            logger.warn(`Failed to enrich trend "${term}" with external data: ${toolError.message}`);
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(`Error enriching trends with external MCP: ${error.message}`);
     }
   }
 
@@ -104,7 +169,8 @@ class TrendSnipper {
       // Stop scheduled tasks
       scheduler.stopAll();
       
-      // Other cleanup if needed
+      // Close MCP client connections
+      await mcpClient.closeAll();
       
       this.isRunning = false;
       logger.info('TrendSnipper stopped successfully');
