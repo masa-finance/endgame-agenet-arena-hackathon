@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import config from '../config.js';
+import config from '../config/config.js';
 import logger from './logger.js';
 import openaiClient from '../ai/openai-client.js';
 

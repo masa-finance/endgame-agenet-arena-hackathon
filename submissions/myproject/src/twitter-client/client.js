@@ -1,6 +1,7 @@
+// twitter-client/client.js - Implémentation du client Twitter
 import { Scraper, SearchMode } from 'agent-twitter-client';
-import config from './config.js';
-import logger from './utils/logger.js';
+import config from '../config/config.js';
+import logger from '../utils/logger.js';
 import CookieManager from './CookieManager.js';
 
 class TwitterClient {
@@ -213,6 +214,4 @@ class TwitterClient {
   }
 }
 
-// Export a singleton instance
-const twitterClient = new TwitterClient();
-export default twitterClient;
+export default TwitterClient;

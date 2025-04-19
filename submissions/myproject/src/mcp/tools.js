@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import logger from '../utils/logger.js';
-import twitterClient from '../twitter-client.js';
+import twitterClient from '../twitter-client/client.js';
 
 // Register MCP tools with the server
 // server - MCP server instance

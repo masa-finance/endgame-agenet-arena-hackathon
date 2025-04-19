@@ -1,5 +1,5 @@
 import axios from 'axios';
-import config from '../config.js';
+import config from '../config/config.js';
 import logger from './logger.js';
 
 class MasaClient {

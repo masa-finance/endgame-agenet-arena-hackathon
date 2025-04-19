@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import config from '../config.js';
+import config from '../config/config.js';
 import logger from './logger.js';
 
 class Scheduler {

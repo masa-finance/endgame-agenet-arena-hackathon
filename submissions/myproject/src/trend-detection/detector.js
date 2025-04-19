@@ -1,7 +1,9 @@
+// trend-detection/detector.js - Implémentation du détecteur de tendances
 import { removeStopwords } from 'stopword';
-import config from './config.js';
-import logger from './utils/logger.js';
-import openaiClient from './ai/openai-client.js';
+import config from '../config/config.js';
+import logger from '../utils/logger.js';
+import openaiClient from '../ai/openai-client.js';
+import TrendAnalyzer from './analyzer.js';
 
 class TrendDetector {
   constructor() {
@@ -9,6 +11,7 @@ class TrendDetector {
     this.currentTermFrequency = new Map();
     this.emergingTrends = [];
     this.trendHistory = [];
+    this.analyzer = new TrendAnalyzer();
     
     // Terms to exclude from analysis
     this.excludedTerms = new Set([
@@ -22,7 +25,6 @@ class TrendDetector {
   }
 
   // Analyser les tweets pour détecter les tendances émergentes
-  // tweets - Liste des tweets à analyser
   async analyzeTweets(tweets) {
     if (!tweets || tweets.length === 0) {
       logger.warn('No tweets to analyze, considering fallback options');
@@ -314,24 +316,9 @@ class TrendDetector {
     const trendsToReport = specificTrends || this.emergingTrends;
     
     if (config.reporting.enhancedReports && config.openai.apiKey) {
-      return this.generateEnhancedReport(trendsToReport);
+      return this.analyzer.generateEnhancedReport(trendsToReport);
     } else {
       return this.generateBasicReport(trendsToReport);
-    }
-  }
-  
-  // Générer un rapport de tendance amélioré en utilisant OpenAI
-  async generateEnhancedReport(trends) {
-    try {
-      if (!trends || trends.length === 0) {
-        return 'No micro-trends detected today. Stay tuned for future insights!';
-      }
-      
-      const report = await openaiClient.generateEnhancedTrendReport(trends);
-      return report;
-    } catch (error) {
-      logger.error(`Error generating enhanced report: ${error.message}`);
-      return this.generateBasicReport(trends);
     }
   }
   
@@ -373,6 +360,4 @@ class TrendDetector {
   }
 }
 
-// Export a singleton instance
-const trendDetector = new TrendDetector();
-export default trendDetector;
+export default TrendDetector;

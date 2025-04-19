@@ -1,13 +1,12 @@
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load environment variables from .env file
-dotenv.config({ path: join(__dirname, '..', '.env') });
+dotenv.config({ path: join(__dirname, '../../', '.env') });
 
 // Determine if we're in production mode
 const isProduction = process.env.NODE_ENV === 'production';
@@ -156,14 +155,14 @@ export default {
     // MCP client configuration
     client: {
       // External MCP servers to connect
-      externalServers: [
-        // Example external server:
-        {
-         id: "masa-mcp",
-          command: "node",
-         args: ["C:/Users/Naesmal/Downloads/Documents/endgame-mcp-hackathon/dist/index.js"]
-        }
-      ]
+      // externalServers: [
+      //   // Example external server:
+      //   {
+      //    id: "masa-mcp",
+      //     command: "node",
+      //    args: ["C:/Users/Naesmal/Downloads/Documents/endgame-mcp-hackathon/dist/index.js"]
+      //   }
+      // ]
     }
   },
   reporting: {

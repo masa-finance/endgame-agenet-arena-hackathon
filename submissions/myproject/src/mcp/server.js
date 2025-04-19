@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import express from 'express';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import config from '../config.js';
+import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import { registerTools } from './tools.js';
 
