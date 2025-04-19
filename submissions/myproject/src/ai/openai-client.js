@@ -6,9 +6,10 @@ class OpenAIClient {
   constructor() {
     this.client = null;
     this.isInitialized = false;
+    this.lastSyntheticGeneration = null;
   }
 
-  // Initialize the OpenAI client with API key
+  // Initialiser le client OpenAI avec la clé API
   initialize() {
     try {
       if (!config.openai || !config.openai.apiKey) {
@@ -29,7 +30,7 @@ class OpenAIClient {
     }
   }
 
-  // Ensure client is initialized before making API calls
+  // S'assurer que le client est initialisé avant d'effectuer des appels API
   ensureInitialized() {
     if (!this.isInitialized) {
       const initialized = this.initialize();
@@ -39,7 +40,7 @@ class OpenAIClient {
     }
   }
 
-  // Analyze tweets to identify emerging trends using AI
+  // Analyser les tweets pour identifier les tendances émergentes en utilisant l'IA
   async analyzeTrends(tweets, existingTerms = []) {
     this.ensureInitialized();
     
@@ -49,7 +50,7 @@ class OpenAIClient {
         return [];
       }
       
-      // Prepare tweet data for analysis
+      // Préparer les données de tweets pour l'analyse
       const tweetTexts = tweets.map(tweet => tweet.full_text || tweet.text || '').filter(text => text.length > 0);
       
       if (tweetTexts.length === 0) {
@@ -59,16 +60,16 @@ class OpenAIClient {
       
       logger.info(`Analyzing ${tweetTexts.length} tweets with OpenAI`);
       
-      // Create a sample of tweets if there are too many
+      // Créer un échantillon de tweets s'il y en a trop
       const sampleSize = Math.min(tweetTexts.length, config.openai.maxSampleSize || 100);
       const sampleTweets = tweetTexts.sort(() => 0.5 - Math.random()).slice(0, sampleSize);
       
-      // Prepare existing terms information
+      // Préparer les informations sur les termes existants
       const existingTermsInfo = existingTerms.length > 0 
         ? `Previously identified trends: ${existingTerms.join(', ')}.` 
         : '';
       
-      // Create the prompt for trend detection
+      // Créer le prompt pour la détection de tendances
       const systemPrompt = `You are an expert trend analyst. Analyze the following tweets and identify emerging trends, topics, or themes. 
       Focus on identifying both explicit hashtags and implicit themes/topics across multiple tweets.
       ${existingTermsInfo}
@@ -82,7 +83,7 @@ class OpenAIClient {
       
       Categorize trends by domain (technology, politics, entertainment, etc.) and provide a confidence score (0-100) for each identified trend.`;
       
-      // Prepare tweet text for the prompt
+      // Préparer le texte du tweet pour le prompt
       const tweetContent = sampleTweets.join('\n\n---\n\n');
       
       const response = await this.client.chat.completions.create({
@@ -104,7 +105,146 @@ class OpenAIClient {
     }
   }
 
-  // Suggest new topics or hashtags to monitor based on current trends
+  // Générer des tendances synthétiques quand aucune donnée Twitter n'est disponible
+  async generateSyntheticTrends() {
+    this.ensureInitialized();
+    
+    try {
+      logger.info('Generating synthetic trends with OpenAI');
+      
+      // Limiter la fréquence de génération à une fois par heure
+      const now = new Date();
+      if (this.lastSyntheticGeneration) {
+        const timeSinceLastGeneration = now - this.lastSyntheticGeneration;
+        const oneHourInMs = 60 * 60 * 1000;
+        
+        if (timeSinceLastGeneration < oneHourInMs) {
+          logger.info(`Synthetic trend generation requested too soon (${Math.round(timeSinceLastGeneration/60000)} minutes since last generation)`);
+          // En mode autonome, on génère quand même mais avec un avertissement
+          if (!config.openai.fallbackMode) {
+            return [];
+          }
+        }
+      }
+      
+      const systemPrompt = `You are an expert trend analyst who can predict emerging social media trends.
+      Without access to real-time Twitter data, predict what topics, hashtags, and conversations might be trending right now.
+      
+      For each trend you predict:
+      1. Provide a term (preferably in hashtag format if appropriate)
+      2. Categorize it (technology, politics, entertainment, etc.)
+      3. Estimate a confidence score (0-100) for how likely this is a real trend
+      4. Provide a brief context explaining why this might be trending
+      5. Estimate a sentiment (positive, negative, neutral)
+      
+      Base your predictions on:
+      - Current events and seasonal topics
+      - Ongoing technology developments
+      - Cultural moments and regular patterns
+      - Recurring discussions in different domains`;
+      
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model || "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Predict 5-8 likely social media trends that might be emerging right now. Provide response as a JSON object with an array of trends.` }
+        ],
+        response_format: { type: "json_object" }
+      });
+      
+      const result = JSON.parse(response.choices[0].message.content);
+      this.lastSyntheticGeneration = now;
+      
+      logger.info(`Generated ${result.trends?.length || 0} synthetic trends with OpenAI`);
+      return result.trends || [];
+    } catch (error) {
+      logger.error(`Error generating synthetic trends: ${error.message}`);
+      return [];
+    }
+  }
+
+  // Générer des sujets d'urgence quand nécessaire pour l'autonomie
+  async generateEmergencyTopics() {
+    this.ensureInitialized();
+    
+    try {
+      logger.info('Generating emergency topics for autonomy maintenance');
+      
+      const systemPrompt = `You are an expert in social media trends and topic discovery.
+      Generate a list of diverse, relevant hashtags that would be valuable to monitor for trending content.
+      
+      For each hashtag:
+      1. Ensure it's something actively discussed on social media
+      2. Provide the category (technology, politics, entertainment, etc.)
+      3. Format properly with the # symbol
+      
+      Include a mix of:
+      - Popular evergreen topics
+      - Current affairs and timely topics
+      - Industry-specific discussions
+      - Cultural phenomena`;
+      
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model || "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Generate 10 diverse, high-value hashtags to monitor on Twitter/X. Return as JSON with 'term' and 'category' fields.` }
+        ],
+        response_format: { type: "json_object" }
+      });
+      
+      const result = JSON.parse(response.choices[0].message.content);
+      logger.info(`Generated ${result.hashtags?.length || 0} emergency hashtags with OpenAI`);
+      
+      return result.hashtags || [];
+    } catch (error) {
+      logger.error(`Error generating emergency topics: ${error.message}`);
+      return [];
+    }
+  }
+
+  // Générer des comptes d'urgence à suivre pour maintenir l'autonomie
+  async generateEmergencyAccounts() {
+    this.ensureInitialized();
+    
+    try {
+      logger.info('Generating emergency accounts to follow');
+      
+      const systemPrompt = `You are an expert in social media influence and analytics.
+      Generate a list of influential Twitter/X accounts that are valuable sources of trending content.
+      
+      For each account:
+      1. Provide the username (without @ symbol)
+      2. Specify the category/domain they represent
+      3. Include accounts that are active and have substantial following
+      
+      Include a mix of:
+      - Tech influencers and innovators
+      - News outlets and journalists
+      - Industry leaders
+      - Cultural commentators
+      - Domain experts`;
+      
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model || "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Generate 8 influential Twitter/X accounts to follow for trend detection. Return as JSON with 'username' and 'category' fields.` }
+        ],
+        response_format: { type: "json_object" }
+      });
+      
+      const result = JSON.parse(response.choices[0].message.content);
+      logger.info(`Generated ${result.accounts?.length || 0} emergency accounts with OpenAI`);
+      
+      return result.accounts || [];
+    } catch (error) {
+      logger.error(`Error generating emergency accounts: ${error.message}`);
+      return [];
+    }
+  }
+
+  // Suggérer de nouveaux sujets ou hashtags à surveiller en fonction des tendances actuelles
   async suggestTopicsToMonitor(currentTopics = [], recentTrends = []) {
     this.ensureInitialized();
     
@@ -143,7 +283,7 @@ class OpenAIClient {
     }
   }
 
-  // Suggest influential accounts to follow based on topics
+  // Suggérer des comptes influents à suivre en fonction des sujets
   async suggestAccountsToFollow(topics = [], currentAccounts = []) {
     this.ensureInitialized();
     
@@ -182,7 +322,7 @@ class OpenAIClient {
     }
   }
 
-  // Generate enhanced trend report for publication
+  // Générer un rapport de tendance amélioré pour publication
   async generateEnhancedTrendReport(trends) {
     this.ensureInitialized();
     
@@ -194,6 +334,7 @@ class OpenAIClient {
       logger.info('Generating enhanced trend report with OpenAI');
       
       const trendsData = JSON.stringify(trends);
+      const reportType = trends.some(t => t.isSynthetic) ? 'AI-Predicted' : 'Detected';
       
       const response = await this.client.chat.completions.create({
         model: config.openai.model || "gpt-4o",
@@ -204,14 +345,15 @@ class OpenAIClient {
           },
           { 
             role: "user", 
-            content: `Create an engaging trend report based on these detected trends: ${trendsData}
+            content: `Create an engaging trend report based on these ${reportType.toLowerCase()} trends: ${trendsData}
             
             Requirements:
             - Start with an attention-grabbing headline
             - Highlight top 3-5 trends with appropriate emojis
             - Keep the overall length under 280 characters
-            - Include the signature "Analyzed by #TrendSniper 🎯"
-            - Add relevant hashtags like #AI #TrendSpotting`
+            - Include the signature "Analyzed by #TrendSnipper 🎯"
+            - Add relevant hashtags like #AI #TrendSpotting
+            - If any trends are synthetic/AI-predicted, make that clear`
           }
         ]
       });
@@ -225,7 +367,11 @@ class OpenAIClient {
       
       // Fall back to basic report if AI generation fails
       if (trends && trends.length > 0) {
-        let report = '📊 Detected Micro-Trends 📈\n\n';
+        const reportTitle = trends.some(t => t.isSynthetic) 
+          ? '🔮 AI-Predicted Micro-Trends 🔮\n\n' 
+          : '📊 Detected Micro-Trends 📈\n\n';
+          
+        let report = reportTitle;
         
         trends.slice(0, 5).forEach((trend, index) => {
           const emoji = index === 0 ? '🔥' : index === 1 ? '⚡' : '📈';
@@ -234,7 +380,7 @@ class OpenAIClient {
           report += `${emoji} ${trend.term}${newLabel}\n`;
         });
         
-        report += '\nAnalyzed by #TrendSniper 🎯 #AI #TrendSpotting';
+        report += '\nAnalyzed by #TrendSnipper 🎯 #AI #TrendSpotting';
         return report;
       }
       
