@@ -3,6 +3,8 @@ import logger from './utils/logger.js';
 import scheduler from './utils/scheduler.js';
 import twitterClient from './twitter-client.js';
 import trendDetector from './trend-detector.js';
+import openaiClient from './ai/openai-client.js';
+import topicManager from './utils/topic-manager.js';
 import mcpServer from './mcp/server.js';
 import mcpClient from './mcp/mcp-client.js';
 
@@ -15,6 +17,19 @@ class TrendSnipper {
   async start() {
     try {
       logger.info('Starting TrendSnipper...');
+      
+      // Initialize OpenAI client if configured
+      if (config.openai && config.openai.apiKey) {
+        const openaiInitialized = openaiClient.initialize();
+        if (!openaiInitialized) {
+          logger.warn('OpenAI client initialization failed, will use traditional trend detection');
+        }
+      } else {
+        logger.info('OpenAI integration not configured, using traditional trend detection');
+      }
+      
+      // Initialize topic manager for dynamic topic discovery
+      await topicManager.initialize();
       
       // Twitter authentication
       const authenticated = await twitterClient.authenticate();
@@ -36,6 +51,16 @@ class TrendSnipper {
         this.runTrendDetectionCycle.bind(this),
         true // Immediate execution in addition to scheduling
       );
+      
+      // Schedule discovery of new topics if enabled
+      if (config.sources.discovery.enabled) {
+        scheduler.schedule(
+          'topic-discovery',
+          config.scheduler.discoveryCronSchedule,
+          this.runTopicDiscoveryCycle.bind(this),
+          false // Don't run immediately, will run on schedule
+        );
+      }
       
       this.isRunning = true;
       logger.info('TrendSnipper started successfully');
@@ -81,12 +106,29 @@ class TrendSnipper {
     try {
       logger.info('Starting trend detection cycle');
       
-      // 1. Collect tweets
-      logger.info('Collecting tweets...');
-      const hashtagTweets = await twitterClient.collectTweetsFromHashtags();
-      const accountTweets = await twitterClient.collectTweetsFromAccounts();
+      // 1. Get current hashtags and accounts to monitor from topic manager
+      const hashtagsToMonitor = topicManager.getHashtags();
+      const accountsToMonitor = topicManager.getAccounts();
       
-      // Merge and deduplicate tweets (based on ID)
+      logger.info(`Monitoring ${hashtagsToMonitor.length} hashtags and ${accountsToMonitor.length} accounts`);
+      
+      // 2. Collect tweets from hashtags
+      logger.info('Collecting tweets from hashtags...');
+      const hashtagPromises = hashtagsToMonitor.map(hashtag => 
+        twitterClient.scraper.searchTweets(hashtag, config.sources.maxTweetsPerSource)
+      );
+      const hashtagTweetsArrays = await Promise.all(hashtagPromises);
+      const hashtagTweets = hashtagTweetsArrays.flat();
+      
+      // 3. Collect tweets from accounts
+      logger.info('Collecting tweets from accounts...');
+      const accountPromises = accountsToMonitor.map(account => 
+        twitterClient.scraper.getTweets(account, config.sources.maxTweetsPerSource)
+      );
+      const accountTweetsArrays = await Promise.all(accountPromises);
+      const accountTweets = accountTweetsArrays.flat();
+      
+      // 4. Merge and deduplicate tweets (based on ID)
       const tweetMap = new Map();
       [...hashtagTweets, ...accountTweets].forEach(tweet => {
         if (tweet.id) {
@@ -102,23 +144,29 @@ class TrendSnipper {
         return;
       }
       
-      // 2. Analyze trends
+      // 5. Analyze trends
       logger.info('Analyzing trends...');
       const emergingTrends = await trendDetector.analyzeTweets(allTweets);
       
-      // 3. Update MCP server with detected trends
+      // 6. Update MCP server with detected trends
       mcpServer.updateTrends(emergingTrends);
       
-      // 4. Generate and publish a trend report
+      // 7. Generate and publish a trend report
       if (emergingTrends.length > 0) {
         logger.info('Generating trend report...');
-        const trendReport = trendDetector.generateTrendReport();
+        const trendReport = await trendDetector.generateTrendReport();
         
         logger.info('Publishing trends on Twitter...');
         await twitterClient.publishTrends(trendReport);
         
-        // 5. Optionnel: Utiliser les serveurs MCP externes pour enrichir l'analyse
+        // 8. Optionnel: Utiliser les serveurs MCP externes pour enrichir l'analyse
         await this.enrichTrendsWithExternalMcp(emergingTrends);
+        
+        // 9. Trigger topic discovery if needed (but don't wait for it)
+        if (topicManager.needsRefresh()) {
+          logger.info('Topic refresh needed, scheduling discovery cycle');
+          setTimeout(() => this.runTopicDiscoveryCycle(emergingTrends), 1000);
+        }
       } else {
         logger.info('No emerging trends detected in this cycle');
       }
@@ -126,6 +174,44 @@ class TrendSnipper {
       logger.info('Trend detection cycle completed successfully');
     } catch (error) {
       logger.error(`Error during trend detection cycle: ${error.message}`);
+    }
+  }
+
+  // Run a topic discovery cycle to find new hashtags and accounts
+  async runTopicDiscoveryCycle(recentTrends = null) {
+    try {
+      logger.info('Starting topic discovery cycle');
+      
+      // If no trends were provided, use latest trends
+      const trendsToUse = recentTrends || trendDetector.emergingTrends;
+      
+      if (!trendsToUse || trendsToUse.length === 0) {
+        logger.info('No trends available for topic discovery, collecting global trends');
+        
+        // Try to get global trends if no specific trends are available
+        const globalTrends = await twitterClient.getGlobalTrends();
+        
+        if (globalTrends && globalTrends.length > 0) {
+          // Format global trends to match our trend format
+          const formattedGlobalTrends = globalTrends.map(trend => ({
+            term: trend.name,
+            count: trend.tweet_volume || 0,
+            growthRate: 100, // Default value
+            isNew: true
+          }));
+          
+          await topicManager.discoverNewTopics(formattedGlobalTrends);
+        } else {
+          logger.warn('No trends available for topic discovery, skipping cycle');
+        }
+      } else {
+        // Use detected trends for discovery
+        await topicManager.discoverNewTopics(trendsToUse);
+      }
+      
+      logger.info('Topic discovery cycle completed');
+    } catch (error) {
+      logger.error(`Error during topic discovery cycle: ${error.message}`);
     }
   }
 
