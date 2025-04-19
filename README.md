@@ -1,83 +1,100 @@
+# TrendSnipper - Twitter Micro-Trends Detector
 
-# Subnet 59 Agent Arena Hackathon
+TrendSnipper is a non-conversational AI agent that automatically detects emerging micro-trends on Twitter before they go viral. Developed for the Subnet 59 Agent Arena Hackathon, this agent leverages the Model Context Protocol (MCP) to enrich detected trends with relevant context.
 
-## Challenge 2: Context-Aware Utility Agents for Masa's Subnet 59
+## 🎯 Key Features
 
-Welcome to the Subnet 59 Agent Arena Hackathon! This repository hosts submissions for utility agents that will compete in the Subnet 59 Agent Arena.
+- **Emerging Trend Detection**: Identifies rapidly growing terms, hashtags, and topics before they become mainstream
+- **Automated Analysis**: Regularly collects and analyzes tweets from configured sources
+- **Automatic Publishing**: Shares micro-trend insights directly on Twitter
+- **MCP Enrichment**: Adds context to detected trends through the Model Context Protocol
 
-### Prize Pool
-$5,000 USDC total for Top 3 AI Agents ($1,667 USDC per winner)
+## 🚀 User Value Proposition
 
-### Objective
-Build utility agents that incorporate MCPs (Machine Context Protocols) for enhanced context awareness. Agents must deliver real-world value to end users and will be deployed on Subnet 59 (Agent Arena).
+- **For Content Creators**: Identify emerging topics to create relevant content ahead of the competition
+- **For Marketers**: Gain valuable insights to optimize campaigns in real-time
+- **For Trend Analysts**: Access objective data on the evolution of online conversations
+- **For Businesses**: Track emerging discussions in your industry
 
-### What is a Utility Agent?
-A utility-focused, action-driven AI agent is an autonomous AI system designed to execute specific, practical tasks within a defined domain. Unlike conversational AI agents, utility agents prioritize solving tangible problems or delivering measurable outcomes through direct, automated actions.
+## 🧠 How the Agent Works
 
-**Examples of Utility Agents:**
-- **DeFi Agent Griffain**: AI-powered platform on Solana blockchain that automates complex DeFi tasks through autonomous agents.
-- **Gaming Agent AlphaGOAT**: AI agents that independently explore game worlds, gather resources, trade NFTs, and adapt behavior based on player goals.
+1. **Data Collection**: The agent collects tweets from configured hashtags and influential accounts
+2. **Trend Analysis**: An algorithm identifies terms with significantly increasing frequency
+3. **Contextual Enrichment**: The MCP server adds context to detected trends
+4. **Insight Publication**: Discovered micro-trends are automatically published on Twitter
 
-### What is Subnet 59 Agent Arena?
-Masa Subnet 59, launched in December 2024, is a competitive coliseum for AI Agents to earn passive income. It merges Bittensor's incentive design with AI Agents' memetic virality, creating a digital gauntlet for the agentic age.
+## 💻 Technical Architecture
 
-### Key Requirements
-- Agent must include at least one MCP for context enhancement
-- Must be non-conversational and focused on utility functions
-- Should demonstrate tangible real-world value to end users
-- Code must be submitted to this repository
-- Agent must be deployable on Subnet 59 infrastructure
+- **TwitterClient**: Interface with Twitter API via agent-twitter-client
+- **TrendDetector**: Module for tweet analysis and micro-trend detection
+- **MCP Server**: Model Context Protocol server for trend enrichment
+- **Scheduler**: Scheduling of analyses at regular intervals
 
-### Evaluation Criteria
-- Real-world utility (40%)
-- Technical implementation (25%)
-- Innovation and originality (20%)
-- Documentation and ease of use (15%)
+## 📋 Prerequisites
 
-### Timeline
-- Submission deadline: [Date TBD]
-- Judging period: [Date range TBD]
-- Winners announced: [Date TBD]
+- Node.js v16+
+- Twitter account with authentication
+- Twitter API keys (for certain features)
 
-### Resources
-- [Agent Arena documentation](#)
-- [Subnet 59 miner specifications](#)
-- [MCP integration guides](#)
-- [Deployment instructions for SN59](#)
+## ⚙️ Installation and Setup
 
-## How to Submit Your Project
-
-1. **Fork this repository**
-
-2. **Create a new folder for your project**
-   - Create a folder inside the `submissions` directory with your project name
-   - Example: `/submissions/myproject`
-
-3. **Create a README.md in your project folder**
-   - Your README should include:
-     - Project name and description
-     - Features and capabilities
-     - How your agent uses MCPs
-     - Real-world utility demonstration
-     - Technical architecture
-     - Setup and deployment instructions
-     - Link to your public repository with the full codebase
-     - Team information
-
-4. **Submit a Pull Request**
-   - Submit a PR to this repository with your submission folder
-   - Use a clear PR title like "Submission: [Your Project Name]"
-   - In the PR description, provide a brief overview of your agent and how it meets the challenge requirements
-
-### Example Submission Structure
-```
-submissions/
-  └── myproject/
-      ├── README.md
-      └── [optional additional files]
+1. Clone this repository:
+```bash
+git clone https://github.com/Naesmal/endgame-agenet-arena-hackathon.git
+cd trendsnipper
 ```
 
-## Questions and Support
-For questions or support regarding the hackathon, please [open an issue](../../issues) or contact the hackathon organizers at [contact information].
+2. Install dependencies:
+```bash
+npm install
+```
 
-Good luck, and may the best agents win!
+3. Copy the example environment file and configure it:
+```bash
+cp .env.example .env
+# Edit the .env file with your information
+```
+
+4. Start the agent:
+```bash
+npm start
+```
+
+## 🔧 Configuration
+
+The agent's behavior can be customized by modifying the `src/config.js` file:
+
+- **Sources**: Hashtags and accounts to monitor
+- **Analysis**: Parameters for trend detection
+- **Scheduling**: Analysis frequency
+- **MCP**: MCP server configuration
+
+## 🔌 MCP (Model Context Protocol) Integration
+
+TrendSnipper exposes the following functionalities through its MCP server:
+
+### MCP Tools
+
+- **enrich_trend**: Enriches a trend with Twitter context
+- **global_trends**: Retrieves official Twitter global trends
+
+### MCP Resources
+
+- **tendances://latest**: Access to the latest detected micro-trends
+
+## 🤝 Subnet 59 Compatibility
+
+TrendSnipper has been specifically designed for the Subnet 59 Agent Arena:
+
+- **Non-Conversational Agent**: Focused on utility actions rather than conversation
+- **MCP Integration**: Leverages the Model Context Protocol for contextual enrichment
+- **Real Value for Users**: Detection of weak signals and sharing of valuable insights
+
+## 📜 License
+
+MIT
+
+## 🙏 Acknowledgements
+
+- Model Context Protocol for the contextual extension architecture
+- Subnet 59 Agent Arena Hackathon for the inspiration
