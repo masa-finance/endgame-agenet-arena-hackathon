@@ -3,10 +3,8 @@ import config from '../config.js';
 import logger from '../utils/logger.js';
 import twitterClient from '../twitter-client.js';
 
-/**
- * Register MCP tools with the server
- * @param {McpServer} server - MCP server instance
- */
+// Register MCP tools with the server
+// server - MCP server instance
 export function registerTools(server) {
   // Tool to enrich a trend with Twitter context
   server.tool(

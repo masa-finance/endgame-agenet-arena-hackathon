@@ -8,49 +8,47 @@ class TrendDetector {
     this.currentTermFrequency = new Map();
     this.emergingTrends = [];
     
-    // Les termes à exclure de l'analyse
+    // Terms to exclude from analysis
     this.excludedTerms = new Set([
       ...config.analysis.excludedTerms,
-      // Ajouter d'autres mots à exclure si nécessaire
+      // Add other words to exclude if needed
     ]);
   }
 
-  /**
-   * Analyse des tweets pour détecter les tendances émergentes
-   * @param {Array} tweets Liste des tweets à analyser
-   */
+  // Analyze tweets to detect emerging trends
+  // tweets - List of tweets to analyze
   async analyzeTweets(tweets) {
     if (!tweets || tweets.length === 0) {
-      logger.warn('Aucun tweet à analyser');
+      logger.warn('No tweets to analyze');
       return [];
     }
     
-    logger.info(`Analyse de ${tweets.length} tweets`);
+    logger.info(`Analyzing ${tweets.length} tweets`);
     
-    // Sauvegarde de la fréquence précédente
+    // Save previous frequency
     this.previousTermFrequency = new Map(this.currentTermFrequency);
     this.currentTermFrequency.clear();
     
-    // Extraire et compter les termes de tous les tweets
+    // Extract and count terms from all tweets
     for (const tweet of tweets) {
-      // Utilise le texte du tweet d'origine si c'est un retweet
+      // Use original tweet text if it's a retweet
       const tweetText = tweet.full_text || tweet.text || '';
       
-      // Tokenisation simple (séparation par espaces, retrait des caractères spéciaux)
+      // Simple tokenization (split by spaces, remove special characters)
       const tokenizedText = tweetText
         .toLowerCase()
         .replace(/[^\w\s#@]/g, '')
         .split(/\s+/);
       
-      // Retrait des mots vides (stopwords)
+      // Remove stopwords
       const filteredTokens = removeStopwords(tokenizedText);
       
-      // Comptage des termes
+      // Count terms
       for (const token of filteredTokens) {
-        // Ignorer les termes exclus et les termes trop courts
+        // Ignore excluded terms and terms that are too short
         if (this.excludedTerms.has(token) || token.length < 3) continue;
         
-        // Compter les occurrences
+        // Count occurrences
         this.currentTermFrequency.set(
           token,
           (this.currentTermFrequency.get(token) || 0) + 1
@@ -58,33 +56,31 @@ class TrendDetector {
       }
     }
     
-    // Identifier les tendances émergentes
+    // Identify emerging trends
     return this.identifyEmergingTrends();
   }
 
-  /**
-   * Identifie les tendances émergentes en comparant les fréquences actuelles et précédentes
-   */
+  // Identify emerging trends by comparing current and previous frequencies
   identifyEmergingTrends() {
     this.emergingTrends = [];
     
-    // Pour chaque terme dans la fréquence courante
+    // For each term in the current frequency
     for (const [term, currentCount] of this.currentTermFrequency.entries()) {
-      // Ignorer les termes qui n'apparaissent pas assez souvent
+      // Ignore terms that don't appear often enough
       if (currentCount < config.analysis.minOccurrences) continue;
       
       const previousCount = this.previousTermFrequency.get(term) || 0;
       
-      // Calculer la croissance (en %) si le terme existait déjà
+      // Calculate growth (in %) if the term already existed
       let growthRate = 0;
       if (previousCount > 0) {
         growthRate = ((currentCount - previousCount) / previousCount) * 100;
       } else {
-        // Pour les nouveaux termes, considérer comme croissance importante
+        // For new terms, consider as significant growth
         growthRate = 100;
       }
       
-      // Considérer comme tendance émergente si la croissance dépasse le seuil configuré
+      // Consider as emerging trend if growth exceeds configured threshold
       if (growthRate >= config.analysis.growthThreshold) {
         this.emergingTrends.push({
           term,
@@ -95,16 +91,14 @@ class TrendDetector {
       }
     }
     
-    // Trier par taux de croissance (du plus élevé au plus bas)
+    // Sort by growth rate (from highest to lowest)
     this.emergingTrends.sort((a, b) => b.growthRate - a.growthRate);
     
-    logger.info(`${this.emergingTrends.length} tendances émergentes identifiées`);
+    logger.info(`${this.emergingTrends.length} emerging trends identified`);
     return this.emergingTrends;
   }
 
-  /**
-   * Generates a text report of emerging trends for publication
-   */
+  // Generates a text report of emerging trends for publication
   generateTrendReport() {
     if (this.emergingTrends.length === 0) {
       return 'No micro-trends detected today. Stay tuned for future insights!';

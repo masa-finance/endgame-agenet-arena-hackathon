@@ -8,41 +8,37 @@ class TwitterClient {
     this.isAuthenticated = false;
   }
 
-  /**
-   * Authentification auprès de Twitter
-   */
+  // Twitter authentication
   async authenticate() {
     try {
       if (this.isAuthenticated) return true;
 
       const { username, password, email, apiKey, apiSecretKey, accessToken, accessTokenSecret } = config.twitter;
       
-      // Si les clés API sont fournies, utiliser l'authentification complète (nécessaire pour certaines fonctionnalités)
+      // If API keys are provided, use complete authentication (required for certain features)
       if (apiKey && apiSecretKey && accessToken && accessTokenSecret) {
         await this.scraper.login(username, password, email, apiKey, apiSecretKey, accessToken, accessTokenSecret);
       } else {
-        // Authentification de base
+        // Basic authentication
         await this.scraper.login(username, password);
       }
       
       this.isAuthenticated = await this.scraper.isLoggedIn();
       
       if (this.isAuthenticated) {
-        logger.info('Authentification Twitter réussie');
+        logger.info('Twitter authentication successful');
         return true;
       } else {
-        logger.error('Échec de l\'authentification Twitter');
+        logger.error('Twitter authentication failed');
         return false;
       }
     } catch (error) {
-      logger.error(`Erreur d'authentification Twitter: ${error.message}`);
+      logger.error(`Twitter authentication error: ${error.message}`);
       return false;
     }
   }
 
-  /**
-   * Collecte des tweets à partir des hashtags configurés
-   */
+  // Collect tweets from configured hashtags
   async collectTweetsFromHashtags() {
     if (!this.isAuthenticated) await this.authenticate();
     
@@ -50,24 +46,22 @@ class TwitterClient {
       const allTweets = [];
       
       for (const hashtag of config.sources.hashtags) {
-        logger.info(`Collecte des tweets pour le hashtag: ${hashtag}`);
+        logger.info(`Collecting tweets for hashtag: ${hashtag}`);
         const tweets = await this.scraper.searchTweets(hashtag, config.sources.maxTweetsPerSource, SearchMode.Latest);
         if (tweets && tweets.length > 0) {
           allTweets.push(...tweets);
-          logger.info(`${tweets.length} tweets collectés pour ${hashtag}`);
+          logger.info(`${tweets.length} tweets collected for ${hashtag}`);
         }
       }
       
       return allTweets;
     } catch (error) {
-      logger.error(`Erreur lors de la collecte des tweets par hashtag: ${error.message}`);
+      logger.error(`Error collecting tweets by hashtag: ${error.message}`);
       return [];
     }
   }
 
-  /**
-   * Collecte des tweets à partir des comptes configurés
-   */
+  // Collect tweets from configured accounts
   async collectTweetsFromAccounts() {
     if (!this.isAuthenticated) await this.authenticate();
     
@@ -75,47 +69,43 @@ class TwitterClient {
       const allTweets = [];
       
       for (const account of config.sources.accounts) {
-        logger.info(`Collecte des tweets pour le compte: ${account}`);
+        logger.info(`Collecting tweets for account: ${account}`);
         const tweets = await this.scraper.getTweets(account, config.sources.maxTweetsPerSource);
         if (tweets && tweets.length > 0) {
           allTweets.push(...tweets);
-          logger.info(`${tweets.length} tweets collectés pour ${account}`);
+          logger.info(`${tweets.length} tweets collected for ${account}`);
         }
       }
       
       return allTweets;
     } catch (error) {
-      logger.error(`Erreur lors de la collecte des tweets par compte: ${error.message}`);
+      logger.error(`Error collecting tweets by account: ${error.message}`);
       return [];
     }
   }
 
-  /**
-   * Publie un tweet contenant les tendances découvertes
-   */
+  // Publish a tweet containing discovered trends
   async publishTrends(trendReport) {
     if (!this.isAuthenticated) await this.authenticate();
     
     try {
-      logger.info('Publication des tendances détectées...');
+      logger.info('Publishing detected trends...');
       const result = await this.scraper.sendTweet(trendReport);
       
       if (result && result.id) {
-        logger.info(`Tendances publiées avec succès! ID du tweet: ${result.id}`);
+        logger.info(`Trends published successfully! Tweet ID: ${result.id}`);
         return true;
       } else {
-        logger.warn('Publication des tendances terminée mais sans confirmation');
+        logger.warn('Trend publication completed but without confirmation');
         return false;
       }
     } catch (error) {
-      logger.error(`Erreur lors de la publication des tendances: ${error.message}`);
+      logger.error(`Error publishing trends: ${error.message}`);
       return false;
     }
   }
 
-  /**
-   * Récupère les tendances mondiales actuelles
-   */
+  // Get current global trends
   async getGlobalTrends() {
     if (!this.isAuthenticated) await this.authenticate();
     
@@ -123,12 +113,12 @@ class TwitterClient {
       const trends = await this.scraper.getTrends();
       return trends || [];
     } catch (error) {
-      logger.error(`Erreur lors de la récupération des tendances globales: ${error.message}`);
+      logger.error(`Error retrieving global trends: ${error.message}`);
       return [];
     }
   }
 }
 
-// Exporter une instance singleton
+// Export a singleton instance
 const twitterClient = new TwitterClient();
 export default twitterClient;

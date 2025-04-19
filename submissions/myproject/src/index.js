@@ -10,55 +10,51 @@ class TrendSnipper {
     this.isRunning = false;
   }
 
-  /**
-   * Initialise et démarre l'agent
-   */
+  // Initialize and start the agent
   async start() {
     try {
-      logger.info('Démarrage de TrendSnipper...');
+      logger.info('Starting TrendSnipper...');
       
-      // Authentification Twitter
+      // Twitter authentication
       const authenticated = await twitterClient.authenticate();
       if (!authenticated) {
-        logger.error('Échec de l\'authentification Twitter, arrêt de l\'application');
+        logger.error('Twitter authentication failed, stopping application');
         process.exit(1);
       }
       
-      // Initialisation du serveur MCP
+      // MCP server initialization
       await mcpServer.initialize();
       
-      // Planification de la détection des tendances
+      // Schedule trend detection
       scheduler.schedule(
         'trend-detection',
         config.scheduler.cronSchedule,
         this.runTrendDetectionCycle.bind(this),
-        true // Exécution immédiate en plus de la planification
+        true // Immediate execution in addition to scheduling
       );
       
       this.isRunning = true;
-      logger.info('TrendSnipper démarré avec succès');
+      logger.info('TrendSnipper started successfully');
       
-      // Gestion de l'arrêt propre
+      // Setup graceful shutdown handling
       this.setupGracefulShutdown();
     } catch (error) {
-      logger.error(`Erreur lors du démarrage de TrendSnipper: ${error.message}`);
+      logger.error(`Error starting TrendSnipper: ${error.message}`);
       process.exit(1);
     }
   }
 
-  /**
-   * Exécute un cycle complet de détection des tendances
-   */
+  // Execute a complete trend detection cycle
   async runTrendDetectionCycle() {
     try {
-      logger.info('Début du cycle de détection des tendances');
+      logger.info('Starting trend detection cycle');
       
-      // 1. Collecte des tweets
-      logger.info('Collecte des tweets...');
+      // 1. Collect tweets
+      logger.info('Collecting tweets...');
       const hashtagTweets = await twitterClient.collectTweetsFromHashtags();
       const accountTweets = await twitterClient.collectTweetsFromAccounts();
       
-      // Fusionner et dédupliquer les tweets (sur la base de l'ID)
+      // Merge and deduplicate tweets (based on ID)
       const tweetMap = new Map();
       [...hashtagTweets, ...accountTweets].forEach(tweet => {
         if (tweet.id) {
@@ -67,69 +63,67 @@ class TrendSnipper {
       });
       
       const allTweets = Array.from(tweetMap.values());
-      logger.info(`Total de ${allTweets.length} tweets uniques collectés`);
+      logger.info(`Total of ${allTweets.length} unique tweets collected`);
       
       if (allTweets.length === 0) {
-        logger.warn('Aucun tweet collecté, annulation du cycle de détection');
+        logger.warn('No tweets collected, cancelling detection cycle');
         return;
       }
       
-      // 2. Analyse des tendances
-      logger.info('Analyse des tendances...');
+      // 2. Analyze trends
+      logger.info('Analyzing trends...');
       const emergingTrends = await trendDetector.analyzeTweets(allTweets);
       
-      // 3. Mise à jour du serveur MCP avec les tendances détectées
+      // 3. Update MCP server with detected trends
       mcpServer.updateTrends(emergingTrends);
       
-      // 4. Générer et publier un rapport de tendances
+      // 4. Generate and publish a trend report
       if (emergingTrends.length > 0) {
-        logger.info('Génération du rapport de tendances...');
+        logger.info('Generating trend report...');
         const trendReport = trendDetector.generateTrendReport();
         
-        logger.info('Publication des tendances sur Twitter...');
+        logger.info('Publishing trends on Twitter...');
         await twitterClient.publishTrends(trendReport);
       } else {
-        logger.info('Aucune tendance émergente détectée dans ce cycle');
+        logger.info('No emerging trends detected in this cycle');
       }
       
-      logger.info('Cycle de détection des tendances terminé avec succès');
+      logger.info('Trend detection cycle completed successfully');
     } catch (error) {
-      logger.error(`Erreur lors du cycle de détection des tendances: ${error.message}`);
+      logger.error(`Error during trend detection cycle: ${error.message}`);
     }
   }
 
-  /**
-   * Configure les gestionnaires pour un arrêt propre
-   */
+  // Configure handlers for graceful shutdown
   setupGracefulShutdown() {
     const shutdown = async () => {
       if (!this.isRunning) return;
       
-      logger.info('Arrêt de TrendSnipper...');
+      logger.info('Stopping TrendSnipper...');
       
-      // Arrêt des tâches planifiées
+      // Stop scheduled tasks
       scheduler.stopAll();
       
-      // Autres nettoyages si nécessaire
+      // Other cleanup if needed
       
       this.isRunning = false;
-      logger.info('TrendSnipper arrêté avec succès');
+      logger.info('TrendSnipper stopped successfully');
       process.exit(0);
     };
     
-    // Capture des signaux d'arrêt
+    // Capture shutdown signals
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
     process.on('uncaughtException', (error) => {
-      logger.error(`Exception non gérée: ${error.message}`);
+      logger.error(`Uncaught exception: ${error.message}`);
       shutdown();
     });
   }
 }
 
-// Point d'entrée principal
+// Main entry point
 const app = new TrendSnipper();
 app.start().catch((error) => {
-  logger.error(`Erreur fatale: ${error.message}`);
+  logger.error(`Fatal error: ${error.message}`);
   process.exit(1);
 });

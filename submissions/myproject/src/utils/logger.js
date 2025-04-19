@@ -5,12 +5,12 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Format personnalisé
+// Custom format
 const customFormat = winston.format.printf(({ level, message, timestamp }) => {
   return `${timestamp} [${level.toUpperCase()}]: ${message}`;
 });
 
-// Configuration du logger
+// Logger configuration
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(
@@ -18,7 +18,7 @@ const logger = winston.createLogger({
     customFormat
   ),
   transports: [
-    // Console pour le développement
+    // Console for development
     new winston.transports.Console({ 
       format: winston.format.combine(
         winston.format.colorize(),
@@ -26,7 +26,7 @@ const logger = winston.createLogger({
         customFormat
       )
     }),
-    // Fichier pour logs persistants
+    // Files for persistent logs
     new winston.transports.File({ 
       filename: join(__dirname, '../../logs/error.log'), 
       level: 'error' 

@@ -5,7 +5,7 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Charger les variables d'environnement
+// Load environment variables
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 export default {
@@ -19,27 +19,27 @@ export default {
     accessTokenSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET
   },
   sources: {
-    // Hashtags à surveiller
+    // Hashtags to monitor
     hashtags: ['#AI', '#MachineLearning', '#Web3', '#Blockchain', '#NFT', '#Crypto'],
-    // Comptes influents à suivre (usernames)
+    // Influential accounts to follow (usernames)
     accounts: ['elonmusk', 'naval', 'vitalikbuterin', 'balajis', 'punk6529'],
-    // Nombre maximum de tweets à collecter par cycle
+    // Maximum number of tweets to collect per cycle
     maxTweetsPerSource: 100
   },
   analysis: {
-    // Nombre minimum d'occurrences pour considérer un terme comme tendance
+    // Minimum occurrences to consider a term as a trend
     minOccurrences: 3,
-    // Seuil de croissance pour considérer une tendance comme émergente (%)
+    // Growth threshold to consider a trend as emerging (%)
     growthThreshold: 50,
-    // Mots à exclure de l'analyse (stopwords seront aussi inclus)
+    // Words to exclude from analysis (stopwords will also be included)
     excludedTerms: ['RT', 'http', 'https', 'amp', 't.co']
   },
   scheduler: {
-    // Format cron pour planifier les exécutions (ici: toutes les 4 heures)
+    // Cron format for scheduling executions (here: every 4 hours)
     cronSchedule: '0 */4 * * *'
   },
   mcp: {
-    // Configuration du serveur MCP
+    // MCP server configuration
     server: {
       name: 'TrendSnipperMCP',
       version: '1.0.0'

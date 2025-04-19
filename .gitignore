@@ -13,3 +13,7 @@ dist
 venv
 __pycache__
 .cache
+logs
+*.egg-info
+*.egg
+*.egg-info/*
