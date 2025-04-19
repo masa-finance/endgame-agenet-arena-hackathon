@@ -55,6 +55,11 @@ function generateInitialHashtags() {
 
 // Exported configuration
 export default {
+  // Agent behavior configuration
+  agent: {
+    autoStart: process.env.AUTO_START === 'true' || true, // Démarrer automatiquement par défaut
+    showNextPostTime: process.env.SHOW_NEXT_POST_TIME === 'true' || true // Afficher l'heure du prochain post
+  },
   twitter: {
     username: process.env.TWITTER_USERNAME,
     password: process.env.TWITTER_PASSWORD,
@@ -153,11 +158,11 @@ export default {
       // External MCP servers to connect
       externalServers: [
         // Example external server:
-        // {
-        //   id: "weather",
-        //   command: "npx",
-        //   args: ["-y", "@modelcontextprotocol/server-weather"]
-        // }
+        {
+         id: "masa-mcp",
+          command: "node",
+         args: ["C:/Users/Naesmal/Downloads/Documents/endgame-mcp-hackathon/dist/index.js"]
+        }
       ]
     }
   },

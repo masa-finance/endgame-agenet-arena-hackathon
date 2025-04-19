@@ -8,6 +8,7 @@ import topicManager from './utils/topic-manager.js';
 import mcpServer from './mcp/server.js';
 import mcpClient from './mcp/mcp-client.js';
 import masaClient from './utils/masa-client.js';
+import cronParser from 'cron-parser';
 
 class TrendSnipper {
   constructor() {
@@ -22,16 +23,18 @@ class TrendSnipper {
       lastCycleTime: null,
       totalTrendsFound: 0,
       averageTweetsPerCycle: 0,
-      cycleTweetCounts: [] // historique pour calcul de moyenne
+      cycleTweetCounts: [], // historique pour calcul de moyenne
+      nextPostTime: null
     };
     this.fallbackAttempts = 0;
     this.autonomousMode = config.sources.autonomy.enabled;
+    this.autoStart = config.agent.autoStart;
   }
 
   // Initialise et démarre l'agent
   async start() {
     try {
-      logger.info('Starting TrendSnipper in autonomous mode...');
+      logger.info(`Starting TrendSnipper in ${this.autoStart ? 'auto-start' : 'manual'} mode...`);
       
       // Initialiser le client OpenAI si configuré
       if (config.openai && config.openai.apiKey) {
@@ -65,16 +68,26 @@ class TrendSnipper {
       // Initialisation du client MCP et connexions aux serveurs externes
       await this.initializeMcpClient();
       
-      // Planifier la détection de tendances
-      scheduler.schedule(
-        'trend-detection',
-        this.currentSchedule,
-        this.runTrendDetectionCycle.bind(this),
-        true // Exécution immédiate en plus de la planification
-      );
+      // Si l'autoStart est activé, planifier la détection de tendances
+      if (this.autoStart) {
+        logger.info('Auto-start enabled, scheduling trend detection');
+        
+        scheduler.schedule(
+          'trend-detection',
+          this.currentSchedule,
+          this.runTrendDetectionCycle.bind(this),
+          true // Exécution immédiate en plus de la planification
+        );
+        
+        // Calculer et afficher le moment du prochain post
+        this.updateNextPostTime();
+      } else {
+        logger.info('Auto-start disabled, trend detection NOT scheduled automatically');
+        logger.info('Use the API to manually trigger trend detection');
+      }
       
       // Planifier la découverte de nouveaux sujets si activée
-      if (config.sources.discovery.enabled) {
+      if (config.sources.discovery.enabled && this.autoStart) {
         scheduler.schedule(
           'topic-discovery',
           config.scheduler.discoveryCronSchedule,
@@ -84,7 +97,7 @@ class TrendSnipper {
       }
       
       // Si nous sommes en mode autonome, vérifions l'état des sources régulièrement
-      if (this.autonomousMode) {
+      if (this.autonomousMode && this.autoStart) {
         scheduler.schedule(
           'autonomy-check',
           '0 */2 * * *', // Toutes les 2 heures
@@ -94,13 +107,39 @@ class TrendSnipper {
       }
       
       this.isRunning = true;
-      logger.info('TrendSnipper started successfully in autonomous mode');
+      logger.info(`TrendSnipper started successfully in ${this.autoStart ? 'auto-start' : 'manual'} mode`);
       
       // Configurer l'arrêt gracieux
       this.setupGracefulShutdown();
     } catch (error) {
       logger.error(`Error starting TrendSnipper: ${error.message}`);
       process.exit(1);
+    }
+  }
+
+  // Mettre à jour et afficher le prochain temps prévu pour le post
+  updateNextPostTime() {
+    try {
+      if (config.agent.showNextPostTime) {
+        const now = new Date();
+        const cronExpression = this.currentSchedule;
+        // Utilisez cronParser.parseExpression au lieu de parseExpression
+        const interval = cronParser.parseExpression(cronExpression);
+        const nextTime = interval.next().toDate();
+        
+        this.cycleStats.nextPostTime = nextTime;
+        
+        // Formater la date et l'heure
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+        
+        const formattedDate = nextTime.toLocaleDateString('fr-FR', dateOptions);
+        const formattedTime = nextTime.toLocaleTimeString('fr-FR', timeOptions);
+        
+        logger.info(`📅 Next post scheduled for: ${formattedDate} at ${formattedTime}`);
+      }
+    } catch (error) {
+      logger.error(`Error calculating next post time: ${error.message}`);
     }
   }
 
@@ -364,6 +403,9 @@ class TrendSnipper {
             // Ajuster dynamiquement la planification pour le prochain cycle
             this.adjustSchedulingBasedOnActivity();
             
+            // Mettre à jour et afficher le prochain temps de post
+            this.updateNextPostTime();
+            
             logger.info('Fallback trend detection cycle completed with synthetic trends');
             return;
           }
@@ -377,6 +419,10 @@ class TrendSnipper {
           
           // Ajuster dynamiquement la planification
           this.adjustSchedulingBasedOnActivity();
+          
+          // Mettre à jour et afficher le prochain temps de post
+          this.updateNextPostTime();
+          
           return;
         }
       } else {
@@ -432,12 +478,18 @@ class TrendSnipper {
       
       // Ajuster dynamiquement la planification pour le prochain cycle
       this.adjustSchedulingBasedOnActivity();
+      
+      // Mettre à jour et afficher le prochain temps de post
+      this.updateNextPostTime();
     } catch (error) {
       logger.error(`Error during trend detection cycle: ${error.message}`);
       this.cycleStats.failedCycles++;
       
       // Ajuster la planification même en cas d'erreur
       this.adjustSchedulingBasedOnActivity();
+      
+      // Mettre à jour et afficher le prochain temps de post même en cas d'erreur
+      this.updateNextPostTime();
     }
   }
 
@@ -522,7 +574,13 @@ class TrendSnipper {
         
         this.currentSchedule = newSchedule;
         scheduler.stop('trend-detection');
-        scheduler.schedule('trend-detection', newSchedule, this.runTrendDetectionCycle.bind(this), false);
+        
+        if (this.autoStart) {
+          scheduler.schedule('trend-detection', newSchedule, this.runTrendDetectionCycle.bind(this), false);
+          logger.info(`Task rescheduled with new frequency: ${newSchedule}`);
+        } else {
+          logger.info(`New schedule saved (${newSchedule}) but task not automatically rescheduled (auto-start disabled)`);
+        }
       } else {
         logger.info(`Maintaining current schedule: ${this.currentSchedule}`);
       }
