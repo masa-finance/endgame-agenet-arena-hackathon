@@ -51,12 +51,16 @@ class TwitterClient {
       // Regular authentication if cookies aren't available or are invalid
       const { username, password, email, apiKey, apiSecretKey, accessToken, accessTokenSecret } = config.twitter;
       
+      logger.info(`Attempting login with username: ${username}`);
+      
       // If API keys are provided, use complete authentication (required for certain features)
       if (apiKey && apiSecretKey && accessToken && accessTokenSecret) {
+        logger.info('Using full API authentication');
         await this.scraper.login(username, password, email, apiKey, apiSecretKey, accessToken, accessTokenSecret);
       } else {
         // Basic authentication
-        await this.scraper.login(username, password);
+        logger.info('Using basic authentication');
+        await this.scraper.login(username, password, email);
       }
       
       this.isAuthenticated = await this.scraper.isLoggedIn();
@@ -159,25 +163,76 @@ class TwitterClient {
     }
   }
 
-  // Publish a tweet containing discovered trends
-  async publishTrends(trendReport) {
-    if (!this.isAuthenticated) await this.authenticate();
-    
-    try {
-      logger.info('Publishing detected trends...');
-      const result = await this.scraper.sendTweet(trendReport);
-      
-      if (result && result.id) {
-        logger.info(`Trends published successfully! Tweet ID: ${result.id}`);
-        return true;
-      } else {
-        logger.warn('Trend publication completed but without confirmation');
+  // Version améliorée pour publier un tweet
+  async publishTweet(text) {
+    // Vérifier l'authentification
+    if (!this.isAuthenticated) {
+      logger.info('Not authenticated, attempting authentication...');
+      const authResult = await this.authenticate();
+      if (!authResult) {
+        logger.error('Authentication failed, cannot publish tweet');
         return false;
       }
-    } catch (error) {
-      logger.error(`Error publishing trends: ${error.message}`);
+    }
+    
+    // Vérifier si le texte est valide
+    if (!text || typeof text !== 'string' || text.trim() === '') {
+      logger.error('Invalid tweet text provided');
       return false;
     }
+    
+    // Limiter la longueur du tweet si nécessaire (280 caractères max)
+    const tweetText = text.length > 280 ? text.substring(0, 277) + '...' : text;
+    
+    try {
+      logger.info(`Attempting to publish tweet: ${tweetText.substring(0, 50)}...`);
+      
+      // Première tentative avec sendTweet standard
+      let result = await this.scraper.sendTweet(tweetText);
+      
+      // Log du résultat
+      if (result) {
+        logger.info(`Tweet published successfully using standard method! Result: ${JSON.stringify(result)}`);
+        return true;
+      }
+      
+      // Si la première méthode échoue, essayer la méthode V2
+      logger.warn('Standard tweet method failed, trying V2 method...');
+      result = await this.scraper.sendTweetV2(tweetText);
+      
+      if (result) {
+        logger.info(`Tweet published successfully using V2 method! Result: ${JSON.stringify(result)}`);
+        return true;
+      }
+      
+      logger.error('Both tweet methods failed without throwing errors');
+      return false;
+    } catch (error) {
+      logger.error(`Error publishing tweet: ${error.message}`);
+      logger.error(`Error stack: ${error.stack}`);
+      
+      // Tenter de réauthentifier et réessayer en cas d'échec
+      try {
+        logger.info('Attempting to reauthenticate and retry publishing...');
+        await this.forceReauthenticate();
+        
+        const result = await this.scraper.sendTweet(tweetText);
+        if (result) {
+          logger.info(`Tweet published successfully after reauthentication! Result: ${JSON.stringify(result)}`);
+          return true;
+        }
+        
+        return false;
+      } catch (retryError) {
+        logger.error(`Retry failed: ${retryError.message}`);
+        return false;
+      }
+    }
+  }
+
+  // Publish a tweet containing discovered trends
+  async publishTrends(trendReport) {
+    return await this.publishTweet(trendReport);
   }
 
   // Get current global trends
@@ -212,6 +267,7 @@ class TwitterClient {
       return false;
     }
   }
+
 }
 
 export default TwitterClient;
