@@ -10,10 +10,23 @@ const __dirname = dirname(__filename);
 
 class TopicManager {
   constructor() {
+    // Vérifier si config.sources.categories existe, sinon utiliser un tableau vide
+    const defaultCategories = [
+      { name: "Technology", active: true },
+      { name: "Business", active: true },
+      { name: "Politics", active: true },
+      { name: "Entertainment", active: true },
+      { name: "Sports", active: true },
+      { name: "Health", active: true },
+      { name: "Science", active: true }
+    ];
+
     this.dynamicTopics = {
-      hashtags: [...config.sources.hashtags],
-      accounts: [...config.sources.accounts],
-      categories: [...config.sources.categories],
+      hashtags: [...(config.sources.hashtags || [])],
+      accounts: [...(config.sources.accounts || [])],
+      categories: (config.sources.categories && Array.isArray(config.sources.categories)) 
+        ? [...config.sources.categories] 
+        : defaultCategories,
       lastUpdated: new Date().toISOString(),
       history: []
     };
@@ -38,7 +51,7 @@ class TopicManager {
   // Ensure the data directory exists
   async ensureDataDirExists() {
     try {
-      const dataDir = join(__dirname, '../data');
+      const dataDir = join(__dirname, '../../data');
       try {
         await fs.access(dataDir);
       } catch (e) {
@@ -59,11 +72,22 @@ class TopicManager {
         const data = await fs.readFile(this.dataPath, 'utf8');
         const storedTopics = JSON.parse(data);
         
+        // Définir des valeurs par défaut si les propriétés sont manquantes
+        const defaultCategories = [
+          { name: "Technology", active: true },
+          { name: "Business", active: true },
+          { name: "Politics", active: true },
+          { name: "Entertainment", active: true },
+          { name: "Sports", active: true },
+          { name: "Health", active: true },
+          { name: "Science", active: true }
+        ];
+        
         // Merge stored topics with default config
         this.dynamicTopics = {
-          hashtags: storedTopics.hashtags || [...config.sources.hashtags],
-          accounts: storedTopics.accounts || [...config.sources.accounts],
-          categories: storedTopics.categories || [...config.sources.categories],
+          hashtags: storedTopics.hashtags || [...(config.sources.hashtags || [])],
+          accounts: storedTopics.accounts || [...(config.sources.accounts || [])],
+          categories: storedTopics.categories || defaultCategories,
           lastUpdated: storedTopics.lastUpdated || new Date().toISOString(),
           history: storedTopics.history || []
         };
@@ -203,7 +227,12 @@ class TopicManager {
 
   // Discovery of new topics based on recent trends
   async discoverNewTopics(recentTrends) {
-    if (!config.sources.discovery.enabled) {
+    // Utiliser une valeur par défaut si config.sources.discovery.enabled n'existe pas
+    const discoveryEnabled = config.sources.discovery && config.sources.discovery.enabled !== undefined 
+      ? config.sources.discovery.enabled 
+      : true;
+      
+    if (!discoveryEnabled) {
       logger.info('Auto-discovery of topics is disabled');
       return false;
     }
@@ -218,8 +247,12 @@ class TopicManager {
       );
       
       if (topicSuggestions && topicSuggestions.length > 0) {
+        // Définir une valeur par défaut pour maxNewTopicsPerCycle
+        const maxNewTopics = config.sources.discovery && config.sources.discovery.maxNewTopicsPerCycle 
+          ? config.sources.discovery.maxNewTopicsPerCycle 
+          : 5;
+          
         // Add a selection of new topics
-        const maxNewTopics = config.sources.discovery.maxNewTopicsPerCycle;
         const selectedTopics = topicSuggestions.slice(0, maxNewTopics);
         
         for (const suggestion of selectedTopics) {
@@ -253,8 +286,12 @@ class TopicManager {
       );
       
       if (accountSuggestions && accountSuggestions.length > 0) {
+        // Définir une valeur par défaut pour maxNewAccountsPerCycle
+        const maxNewAccounts = config.sources.discovery && config.sources.discovery.maxNewAccountsPerCycle 
+          ? config.sources.discovery.maxNewAccountsPerCycle 
+          : 3;
+          
         // Add a selection of new accounts
-        const maxNewAccounts = config.sources.discovery.maxNewAccountsPerCycle;
         const selectedAccounts = accountSuggestions.slice(0, maxNewAccounts);
         
         for (const suggestion of selectedAccounts) {
@@ -276,12 +313,21 @@ class TopicManager {
 
   // Record a discovery cycle in history
   recordDiscoveryCycle(topicSuggestions, accountSuggestions) {
+    // Définir des valeurs par défaut
+    const maxNewTopics = config.sources.discovery && config.sources.discovery.maxNewTopicsPerCycle 
+      ? config.sources.discovery.maxNewTopicsPerCycle 
+      : 5;
+      
+    const maxNewAccounts = config.sources.discovery && config.sources.discovery.maxNewAccountsPerCycle 
+      ? config.sources.discovery.maxNewAccountsPerCycle 
+      : 3;
+      
     const cycle = {
       date: new Date().toISOString(),
       topicSuggestions: topicSuggestions || [],
       accountSuggestions: accountSuggestions || [],
-      topicsAdded: topicSuggestions ? Math.min(topicSuggestions.length, config.sources.discovery.maxNewTopicsPerCycle) : 0,
-      accountsAdded: accountSuggestions ? Math.min(accountSuggestions.length, config.sources.discovery.maxNewAccountsPerCycle) : 0
+      topicsAdded: topicSuggestions ? Math.min(topicSuggestions.length, maxNewTopics) : 0,
+      accountsAdded: accountSuggestions ? Math.min(accountSuggestions.length, maxNewAccounts) : 0
     };
     
     // Keep history size manageable
@@ -301,7 +347,12 @@ class TopicManager {
     const now = new Date();
     const hoursSinceLastUpdate = (now - lastUpdate) / (1000 * 60 * 60);
     
-    return hoursSinceLastUpdate >= config.sources.discovery.refreshInterval;
+    // Définir une valeur par défaut pour refreshInterval
+    const refreshInterval = config.sources.discovery && config.sources.discovery.refreshInterval 
+      ? config.sources.discovery.refreshInterval 
+      : 12;
+      
+    return hoursSinceLastUpdate >= refreshInterval;
   }
 }
 

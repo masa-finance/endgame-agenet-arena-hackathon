@@ -1,4 +1,4 @@
-// trend-detection/detector.js - Implémentation du détecteur de tendances
+// trend-detection/detector.js - Enhanced trend detector implementation
 import { removeStopwords } from 'stopword';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
@@ -19,12 +19,15 @@ class TrendDetector {
       // Add other words to exclude if needed
     ]);
     
-    // États d'analyse autonome
+    // Autonomous analysis states
     this.autonomousModeActive = config.analysis.autonomousFallback.enabled;
     this.lastSyntheticTrendsGeneration = null;
+    
+    // Recency configuration
+    this.maxTweetAgeInHours = config.analysis.maxTweetAgeInHours || 24; // Default to 24h if not configured
   }
 
-  // Analyser les tweets pour détecter les tendances émergentes
+  // Analyze tweets to detect emerging trends
   async analyzeTweets(tweets) {
     if (!tweets || tweets.length === 0) {
       logger.warn('No tweets to analyze, considering fallback options');
@@ -36,43 +39,99 @@ class TrendDetector {
       return [];
     }
     
-    logger.info(`Analyzing ${tweets.length} tweets`);
+    // ENHANCEMENT: Filter tweets by recency before analysis
+    const recentTweets = this.filterRecentTweets(tweets);
+    
+    if (recentTweets.length === 0) {
+      logger.warn('No recent tweets found, falling back to synthetic trends');
+      
+      if (this.autonomousModeActive) {
+        return await this.generateSyntheticTrends();
+      }
+      
+      return [];
+    }
+    
+    logger.info(`Analyzing ${recentTweets.length} recent tweets out of ${tweets.length} total tweets`);
     
     if (config.openai && config.openai.useForTrendDetection) {
-      // Utiliser la détection de tendance basée sur l'IA
-      return await this.analyzeWithAI(tweets);
+      // Use AI-based trend detection
+      return await this.analyzeWithAI(recentTweets);
     } else {
-      // Utiliser la détection traditionnelle basée sur la fréquence
-      return await this.analyzeWithFrequency(tweets);
+      // Use traditional frequency-based detection
+      return await this.analyzeWithFrequency(recentTweets);
     }
   }
+  
+  // ENHANCEMENT: Filter tweets by recency
+  filterRecentTweets(tweets) {
+    const now = new Date();
+    const cutoffTime = new Date(now.getTime() - (this.maxTweetAgeInHours * 60 * 60 * 1000));
+    
+    logger.info(`Filtering tweets with cutoff date: ${cutoffTime.toISOString()}`);
+    
+    return tweets.filter(tweet => {
+      // First try to use the tweet's created_at timestamp
+      if (tweet.created_at) {
+        const tweetDate = new Date(tweet.created_at);
+        const isRecent = tweetDate >= cutoffTime;
+        
+        // Add debug logging for very old tweets
+        if (!isRecent) {
+          const hoursSince = Math.round((now - tweetDate) / (1000 * 60 * 60));
+          if (hoursSince > 168) { // More than 1 week old
+            logger.debug(`Filtered out aged tweet: ${hoursSince} hours old, created: ${tweetDate.toISOString()}`);
+          }
+        }
+        
+        return isRecent;
+      }
+      
+      // If no created_at, try to extract date from tweet ID (Twitter IDs contain timestamp information)
+      if (tweet.id_str || tweet.id) {
+        const idStr = tweet.id_str || tweet.id.toString();
+        // Twitter snowflake ID format: first 41 bits after the epoch bits are timestamp
+        // This is a simplified estimation
+        const tweetTimestamp = parseInt(idStr.slice(0, -15)) + 1288834974657;
+        const tweetDate = new Date(tweetTimestamp);
+        
+        // Validate the date is reasonable (between 2020 and now)
+        if (tweetDate >= new Date('2020-01-01') && tweetDate <= now) {
+          return tweetDate >= cutoffTime;
+        }
+      }
+      
+      // If we can't determine the date, include by default (let the AI filter by content)
+      return true;
+    });
+  }
 
-  // Analyse basée sur la fréquence traditionnelle
+  // Traditional frequency-based analysis
   async analyzeWithFrequency(tweets) {
-    // Sauvegarder la fréquence précédente
+    // Save previous frequency
     this.previousTermFrequency = new Map(this.currentTermFrequency);
     this.currentTermFrequency.clear();
     
-    // Extraire et compter les termes de tous les tweets
+    // Extract and count terms from all tweets
     for (const tweet of tweets) {
-      // Utiliser le texte original du tweet s'il s'agit d'un retweet
+      // Use original tweet text if it's a retweet
       const tweetText = tweet.full_text || tweet.text || '';
       
-      // Tokenisation simple (séparation par espaces, suppression des caractères spéciaux)
+      // Simple tokenization (space separation, removal of special characters)
       const tokenizedText = tweetText
         .toLowerCase()
         .replace(/[^\w\s#@]/g, '')
         .split(/\s+/);
       
-      // Supprimer les mots vides
+      // Remove stopwords
       const filteredTokens = removeStopwords(tokenizedText);
       
-      // Compter les termes
+      // Count terms
       for (const token of filteredTokens) {
-        // Ignorer les termes exclus et les termes trop courts
+        // Ignore excluded terms and terms that are too short
         if (this.excludedTerms.has(token) || token.length < 3) continue;
         
-        // Compter les occurrences
+        // Count occurrences
         this.currentTermFrequency.set(
           token,
           (this.currentTermFrequency.get(token) || 0) + 1
@@ -80,17 +139,17 @@ class TrendDetector {
       }
     }
     
-    // Identifier les tendances émergentes
+    // Identify emerging trends
     return this.identifyEmergingTrends();
   }
   
-  // Analyse de tendance basée sur l'IA
+  // AI-based trend analysis
   async analyzeWithAI(tweets) {
-    // Maintenir quand même la carte de fréquence pour comparaison historique
+    // Still maintain the frequency map for historical comparison
     this.previousTermFrequency = new Map(this.currentTermFrequency);
     this.currentTermFrequency.clear();
     
-    // D'abord faire une analyse de fréquence de base pour maintenir les cartes à jour
+    // First do a basic frequency analysis to keep maps updated
     for (const tweet of tweets) {
       const tweetText = tweet.full_text || tweet.text || '';
       
@@ -108,26 +167,29 @@ class TrendDetector {
     }
     
     try {
-      // Préparer les termes existants pour fournir un contexte à l'IA
+      // Prepare existing terms to provide context to AI
       const existingTerms = this.trendHistory.length > 0 
         ? this.trendHistory[this.trendHistory.length - 1].map(trend => trend.term)
         : [];
       
-      // Utiliser OpenAI pour analyser les tweets et détecter les tendances
-      const aiTrends = await openaiClient.analyzeTrends(tweets, existingTerms);
+      // ENHANCEMENT: Add current date context for the AI
+      const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      // Use OpenAI to analyze tweets and detect trends
+      const aiTrends = await openaiClient.analyzeTrends(tweets, existingTerms, currentDate);
       
       if (!aiTrends || aiTrends.length === 0) {
         logger.info('No trends detected by AI, falling back to frequency analysis');
         return this.identifyEmergingTrends();
       }
       
-      // Transformer la sortie AI dans notre format de tendance attendu
+      // Transform AI output into our expected trend format
       this.emergingTrends = aiTrends.map(aiTrend => {
-        // Obtenir la fréquence si disponible, ou utiliser une valeur par défaut
+        // Get frequency if available, or use a default value
         const currentCount = this.currentTermFrequency.get(aiTrend.term) || aiTrend.occurrences || 1;
         const previousCount = this.previousTermFrequency.get(aiTrend.term) || 0;
         
-        // Calculer le taux de croissance ou utiliser la valeur fournie par l'IA
+        // Calculate growth rate or use the value provided by AI
         let growthRate = aiTrend.confidence || 0;
         if (previousCount > 0 && !aiTrend.confidence) {
           growthRate = ((currentCount - previousCount) / previousCount) * 100;
@@ -140,14 +202,15 @@ class TrendDetector {
           isNew: previousCount === 0,
           category: aiTrend.category || null,
           sentiment: aiTrend.sentiment || null,
-          context: aiTrend.context || null
+          context: aiTrend.context || null,
+          createdAt: new Date().toISOString() // ENHANCEMENT: Add timestamp to track trend age
         };
       });
       
-      // Trier par taux de croissance ou confiance (du plus élevé au plus bas)
+      // Sort by growth rate or confidence (highest to lowest)
       this.emergingTrends.sort((a, b) => b.growthRate - a.growthRate);
       
-      // Enregistrer les tendances pour référence historique
+      // Save trends for historical reference
       this.updateTrendHistory();
       
       logger.info(`${this.emergingTrends.length} emerging trends identified by AI analysis`);
@@ -156,17 +219,17 @@ class TrendDetector {
       logger.error(`Error in AI trend analysis: ${error.message}`);
       logger.info('Falling back to frequency-based trend detection');
       
-      // Fallback vers la méthode traditionnelle si l'analyse IA échoue
+      // Fallback to traditional method if AI analysis fails
       return this.identifyEmergingTrends();
     }
   }
   
-  // Générer des tendances synthétiques quand aucune donnée réelle n'est disponible
+  // Generate synthetic trends when no real data is available
   async generateSyntheticTrends() {
     try {
       logger.info('Generating synthetic trends for autonomous operation');
       
-      // Limiter la génération à une fois par heure maximum
+      // Limit generation to once per hour maximum
       const now = new Date();
       if (this.lastSyntheticTrendsGeneration) {
         const timeSinceLastGeneration = now - this.lastSyntheticTrendsGeneration;
@@ -178,14 +241,18 @@ class TrendDetector {
         }
       }
       
-      // Si OpenAI est configuré, utiliser pour générer des tendances synthétiques
+      // ENHANCEMENT: Add current date for context
+      const currentDate = new Date();
+      
+      // If OpenAI is configured, use it to generate synthetic trends
       if (config.openai && config.openai.apiKey) {
         logger.info('Using OpenAI to generate synthetic trends');
         
-        const syntheticTrends = await openaiClient.generateSyntheticTrends();
+        // ENHANCEMENT: Pass current date to ensure time-awareness
+        const syntheticTrends = await openaiClient.generateSyntheticTrends(currentDate);
         
         if (syntheticTrends && syntheticTrends.length > 0) {
-          // Transformer au format standard des tendances
+          // Transform to standard trend format
           this.emergingTrends = syntheticTrends.map(trend => ({
             term: trend.term,
             count: trend.count || Math.floor(Math.random() * 100) + 20,
@@ -194,13 +261,14 @@ class TrendDetector {
             category: trend.category || null,
             sentiment: trend.sentiment || null,
             context: trend.context || null,
-            isSynthetic: true // Marquer comme synthétique
+            isSynthetic: true, // Mark as synthetic
+            createdAt: new Date().toISOString() // Add timestamp
           }));
           
-          // Enregistrer l'historique des tendances
+          // Record trend history
           this.updateTrendHistory();
           
-          // Mettre à jour le timestamp de dernière génération
+          // Update last generation timestamp
           this.lastSyntheticTrendsGeneration = now;
           
           logger.info(`${this.emergingTrends.length} synthetic trends generated successfully`);
@@ -208,22 +276,48 @@ class TrendDetector {
         }
       }
       
-      // Fallback: Générer des tendances simples basées sur des sujets courants
+      // Fallback: Generate simple trends based on common topics
       logger.info('Generating basic synthetic trends as fallback');
       
-      const basicTrendTopics = [
+      // ENHANCEMENT: Time-aware trend topics
+      const month = currentDate.getMonth(); // 0-11 where 0 is January
+      const day = currentDate.getDate(); // 1-31
+      
+      // Add seasonal and time-aware topics
+      let basicTrendTopics = [
         { term: "#AI", category: "Technology" },
         { term: "#MachineLearning", category: "Technology" },
         { term: "#Blockchain", category: "Technology" },
-        { term: "#ClimateAction", category: "Environment" },
         { term: "#DigitalTransformation", category: "Business" },
         { term: "#RemoteWork", category: "Work" },
         { term: "#SpaceExploration", category: "Science" },
         { term: "#Cybersecurity", category: "Technology" }
       ];
       
-      // Sélectionner aléatoirement 3-5 tendances
-      const numTrends = Math.floor(Math.random() * 3) + 3; // 3 à 5 tendances
+      // Add contextual seasonal topics based on current month
+      if (month === 3) { // April
+        basicTrendTopics = [...basicTrendTopics,
+          { term: "#Spring", category: "Seasons" },
+          { term: "#EarthDay", category: "Environment" },
+        ];
+      } else if (month === 10 || month === 11) { // November-December
+        basicTrendTopics = [...basicTrendTopics,
+          { term: "#HolidayShopping", category: "Retail" },
+          { term: "#WinterPrep", category: "Lifestyle" },
+        ];
+      } else if (month === 5 || month === 6 || month === 7) { // June-August
+        basicTrendTopics = [...basicTrendTopics,
+          { term: "#SummerBreak", category: "Lifestyle" },
+          { term: "#BeachDay", category: "Travel" },
+        ];
+      }
+      
+      // Include the current year in some hashtags
+      const currentYear = currentDate.getFullYear();
+      basicTrendTopics.push({ term: `#Tech${currentYear}`, category: "Technology" });
+      
+      // Randomly select 3-5 trends
+      const numTrends = Math.floor(Math.random() * 3) + 3; // 3 to 5 trends
       const selectedTrends = [];
       
       while (selectedTrends.length < numTrends && basicTrendTopics.length > 0) {
@@ -232,21 +326,22 @@ class TrendDetector {
         basicTrendTopics.splice(randomIndex, 1);
       }
       
-      // Créer les objets de tendance
+      // Create trend objects
       this.emergingTrends = selectedTrends.map(topic => ({
         term: topic.term,
         count: Math.floor(Math.random() * 100) + 20, // 20-120 mentions
-        growthRate: Math.floor(Math.random() * 50) + 50, // 50-100% croissance
-        isNew: Math.random() > 0.5, // 50% chance d'être nouveau
+        growthRate: Math.floor(Math.random() * 50) + 50, // 50-100% growth
+        isNew: Math.random() > 0.5, // 50% chance of being new
         category: topic.category,
         sentiment: Math.random() > 0.7 ? "negative" : Math.random() > 0.4 ? "positive" : "neutral",
-        isSynthetic: true
+        isSynthetic: true,
+        createdAt: new Date().toISOString() // Add timestamp
       }));
       
-      // Enregistrer l'historique des tendances
+      // Record trend history
       this.updateTrendHistory();
       
-      // Mettre à jour le timestamp de dernière génération
+      // Update last generation timestamp
       this.lastSyntheticTrendsGeneration = now;
       
       logger.info(`${this.emergingTrends.length} basic synthetic trends generated as fallback`);
@@ -257,95 +352,104 @@ class TrendDetector {
     }
   }
   
-  // Mettre à jour l'historique des tendances pour référence future
+  // Update trend history for future reference
   updateTrendHistory() {
-    // Ajouter les tendances actuelles à l'historique
+    // Add current trends to history
     this.trendHistory.push([...this.emergingTrends]);
     
-    // Limiter la taille de l'historique basée sur la configuration
+    // Limit history size based on configuration
     const maxHistorySize = config.analysis.trendHistorySize || 10;
     if (this.trendHistory.length > maxHistorySize) {
       this.trendHistory.shift();
     }
   }
 
-  // Identifier les tendances émergentes en comparant les fréquences actuelles et précédentes
+  // Identify emerging trends by comparing current and previous frequencies
   identifyEmergingTrends() {
     this.emergingTrends = [];
     
-    // Pour chaque terme dans la fréquence actuelle
+    // For each term in current frequency
     for (const [term, currentCount] of this.currentTermFrequency.entries()) {
-      // Ignorer les termes qui n'apparaissent pas assez souvent
+      // Ignore terms that don't appear often enough
       if (currentCount < config.analysis.minOccurrences) continue;
       
       const previousCount = this.previousTermFrequency.get(term) || 0;
       
-      // Calculer la croissance (en %) si le terme existait déjà
+      // Calculate growth (in %) if term already existed
       let growthRate = 0;
       if (previousCount > 0) {
         growthRate = ((currentCount - previousCount) / previousCount) * 100;
       } else {
-        // Pour les nouveaux termes, considérer comme une croissance significative
+        // For new terms, consider it significant growth
         growthRate = 100;
       }
       
-      // Considérer comme tendance émergente si la croissance dépasse le seuil configuré
+      // Consider as emerging trend if growth exceeds configured threshold
       if (growthRate >= config.analysis.growthThreshold) {
         this.emergingTrends.push({
           term,
           count: currentCount,
           growthRate,
-          isNew: previousCount === 0
+          isNew: previousCount === 0,
+          createdAt: new Date().toISOString() // Add timestamp
         });
       }
     }
     
-    // Trier par taux de croissance (du plus élevé au plus bas)
+    // Sort by growth rate (highest to lowest)
     this.emergingTrends.sort((a, b) => b.growthRate - a.growthRate);
     
-    // Mettre à jour l'historique des tendances
+    // Update trend history
     this.updateTrendHistory();
     
     logger.info(`${this.emergingTrends.length} emerging trends identified`);
     return this.emergingTrends;
   }
   
-  // Générer un rapport textuel des tendances émergentes pour publication
+  // Generate a textual report of emerging trends for publication
   async generateTrendReport(specificTrends = null) {
-    // Utiliser les tendances fournies ou les tendances émergentes détectées
+    // Use provided trends or detected emerging trends
     const trendsToReport = specificTrends || this.emergingTrends;
     
+    // ENHANCEMENT: Add date context for the report
+    const currentDate = new Date();
+    const dateString = currentDate.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+    
     if (config.reporting.enhancedReports && config.openai.apiKey) {
-      return this.analyzer.generateEnhancedReport(trendsToReport);
+      return this.analyzer.generateEnhancedReport(trendsToReport, dateString);
     } else {
-      return this.generateBasicReport(trendsToReport);
+      return this.generateBasicReport(trendsToReport, dateString);
     }
   }
   
-  // Générer un rapport de tendance de base sans aide de l'IA
-  generateBasicReport(trends) {
+  // Generate a basic trend report without AI assistance
+  generateBasicReport(trends, dateString) {
     if (!trends || trends.length === 0) {
-      return 'No micro-trends detected today. Stay tuned for future insights!';
+      return `No micro-trends detected today (${dateString}). Stay tuned for future insights!`;
     }
     
-    // Limiter le nombre de tendances à afficher
+    // Limit number of trends to display
     const maxTrends = config.reporting.maxTrendsInReport || 5;
     const topTrends = trends.slice(0, maxTrends);
     
-    // Ajouter un indicateur si des tendances synthétiques sont présentes
+    // Add indicator if synthetic trends are present
     const hasSyntheticTrends = topTrends.some(trend => trend.isSynthetic === true);
     const reportPrefix = hasSyntheticTrends 
-      ? '🔮 AI-Predicted Micro-Trends 🔮\n\n' 
-      : '📊 Detected Micro-Trends 📈\n\n';
+      ? `🔮 AI-Predicted Micro-Trends for ${dateString} 🔮\n\n` 
+      : `📊 Today's Micro-Trends (${dateString}) 📈\n\n`;
     
     let report = reportPrefix;
     
     topTrends.forEach((trend, index) => {
-      // Ajouter un emoji différent en fonction du rang
+      // Add different emoji based on rank
       const emoji = index === 0 ? '🔥' : index === 1 ? '⚡' : '📈';
       const newLabel = trend.isNew ? ' (NEW!)' : '';
       
-      // Ajouter la catégorie si disponible et configurée
+      // Add category if available and configured
       const categoryLabel = trend.category && config.reporting.includeCategories 
         ? ` [${trend.category}]` 
         : '';
@@ -353,7 +457,7 @@ class TrendDetector {
       report += `${emoji} ${trend.term}${newLabel}${categoryLabel}\n`;
     });
     
-    // Ajouter la signature et les hashtags
+    // Add signature and hashtags
     report += '\nAnalyzed by #TrendSnipper 🎯 #AI #TrendSpotting';
     
     return report;

@@ -2,7 +2,7 @@
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import scheduler from '../utils/scheduler.js';
-import cronParser from 'cron-parser';
+import cron from 'cron-parser';
 
 class SchedulerService {
   constructor(trendSnipper) {
@@ -30,20 +30,25 @@ class SchedulerService {
       if (config.agent.showNextPostTime) {
         const now = new Date();
         const cronExpression = this.trendSnipper.currentSchedule;
-        // Utilisez cronParser.parseExpression au lieu de parseExpression
-        const interval = cronParser.parseExpression(cronExpression);
-        const nextTime = interval.next().toDate();
         
-        this.trendSnipper.cycleStats.nextPostTime = nextTime;
-        
-        // Formater la date et l'heure
-        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
-        
-        const formattedDate = nextTime.toLocaleDateString('fr-FR', dateOptions);
-        const formattedTime = nextTime.toLocaleTimeString('fr-FR', timeOptions);
-        
-        logger.info(`📅 Next post scheduled for: ${formattedDate} at ${formattedTime}`);
+        try {
+          // Utilisez cron.parseExpression au lieu de cronParser.parseExpression
+          const interval = cron.parseExpression(cronExpression);
+          const nextTime = interval.next().toDate();
+          
+          this.trendSnipper.cycleStats.nextPostTime = nextTime;
+          
+          // Formater la date et l'heure
+          const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+          const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+          
+          const formattedDate = nextTime.toLocaleDateString('fr-FR', dateOptions);
+          const formattedTime = nextTime.toLocaleTimeString('fr-FR', timeOptions);
+          
+          logger.info(`📅 Next post scheduled for: ${formattedDate} at ${formattedTime}`);
+        } catch (parseError) {
+          logger.error(`Error parsing cron expression '${cronExpression}': ${parseError.message}`);
+        }
       }
     } catch (error) {
       logger.error(`Error calculating next post time: ${error.message}`);
@@ -53,7 +58,7 @@ class SchedulerService {
   // Ajuster dynamiquement la planification en fonction de l'activité
   adjustSchedulingBasedOnActivity() {
     try {
-      if (!config.scheduler.dynamic.enabled) return;
+      if (!config.scheduler || !config.scheduler.dynamic || !config.scheduler.dynamic.enabled) return;
       
       logger.info('Evaluating scheduler adjustment based on activity level');
       
@@ -61,12 +66,21 @@ class SchedulerService {
       let newActivityLevel = 'medium';
       
       // Si nous avons assez de données pour évaluer
-      if (this.trendSnipper.cycleStats.cycleTweetCounts.length >= 3) {
+      if (this.trendSnipper.cycleStats.cycleTweetCounts && this.trendSnipper.cycleStats.cycleTweetCounts.length >= 3) {
         const avgTweets = this.trendSnipper.cycleStats.averageTweetsPerCycle;
         
-        if (avgTweets > 300) {
+        // Obtenir les seuils d'activité depuis la configuration
+        const highActivityThreshold = config.scheduler.dynamic.activityThresholds
+          ? config.scheduler.dynamic.activityThresholds.highActivityMinTweets || 200
+          : 200;
+          
+        const lowActivityThreshold = config.scheduler.dynamic.activityThresholds
+          ? config.scheduler.dynamic.activityThresholds.lowActivityMaxTweets || 50
+          : 50;
+        
+        if (avgTweets > highActivityThreshold) {
           newActivityLevel = 'high';
-        } else if (avgTweets < 50) {
+        } else if (avgTweets < lowActivityThreshold) {
           newActivityLevel = 'low';
         }
         
@@ -85,13 +99,13 @@ class SchedulerService {
       // Définir le nouvel horaire en fonction du niveau d'activité
       let newSchedule;
       if (newActivityLevel === 'high') {
-        newSchedule = config.scheduler.dynamic.minInterval; // plus fréquent
+        newSchedule = config.scheduler.dynamic.minInterval || '0 */1 * * *'; // plus fréquent
         logger.info('High activity detected, increasing check frequency');
       } else if (newActivityLevel === 'low') {
-        newSchedule = config.scheduler.dynamic.maxInterval; // moins fréquent
+        newSchedule = config.scheduler.dynamic.maxInterval || '0 */4 * * *'; // moins fréquent
         logger.info('Low activity detected, decreasing check frequency');
       } else {
-        newSchedule = config.scheduler.cronSchedule; // horaire par défaut
+        newSchedule = config.scheduler.dynamic.defaultInterval || '0 */2 * * *'; // horaire par défaut
       }
       
       // Mettre à jour la planification si nécessaire
@@ -99,18 +113,24 @@ class SchedulerService {
         logger.info(`Adjusting schedule from ${this.trendSnipper.currentSchedule} to ${newSchedule}`);
         
         this.trendSnipper.currentSchedule = newSchedule;
-        scheduler.stop('trend-detection');
         
-        if (this.trendSnipper.autoStart) {
-          scheduler.schedule(
-            'trend-detection', 
-            newSchedule, 
-            this.trendSnipper.trendDetectionService.runTrendDetectionCycle.bind(this.trendSnipper.trendDetectionService), 
-            false
-          );
-          logger.info(`Task rescheduled with new frequency: ${newSchedule}`);
+        // S'assurer que scheduler.stop existe
+        if (scheduler && typeof scheduler.stop === 'function') {
+          scheduler.stop('trend-detection');
+          
+          if (this.trendSnipper.autoStart) {
+            this.scheduleTask(
+              'trend-detection', 
+              newSchedule, 
+              this.trendSnipper.trendDetectionService.runTrendDetectionCycle.bind(this.trendSnipper.trendDetectionService), 
+              false
+            );
+            logger.info(`Task rescheduled with new frequency: ${newSchedule}`);
+          } else {
+            logger.info(`New schedule saved (${newSchedule}) but task not automatically rescheduled (auto-start disabled)`);
+          }
         } else {
-          logger.info(`New schedule saved (${newSchedule}) but task not automatically rescheduled (auto-start disabled)`);
+          logger.warn('Cannot stop scheduled task: scheduler.stop is not a function');
         }
       } else {
         logger.info(`Maintaining current schedule: ${this.trendSnipper.currentSchedule}`);
