@@ -1,0 +1,36 @@
+{
+    "name": "trendsnipper",
+    "version": "0.1.0",
+    "description": "An AI agent that detects Twitter micro-trends for Subnet 59",
+    "main": "src/app.js",
+    "type": "module",
+    "scripts": {
+        "start": "node src/app.js",
+        "dev": "nodemon src/app.js",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "agent",
+        "twitter",
+        "trends",
+        "subnet59",
+        "mcp",
+        "ai"
+    ],
+    "author": "Naesmal",
+    "license": "MIT",
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.10.1",
+        "agent-twitter-client": "^0.0.18",
+        "axios": "^1.8.4",
+        "cron-parser": "^5.1.1",
+        "dotenv": "^16.3.1",
+        "node-cron": "^3.0.3",
+        "openai": "^4.95.1",
+        "stopword": "^2.0.8",
+        "winston": "^3.11.0"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.2"
+    }
+}
