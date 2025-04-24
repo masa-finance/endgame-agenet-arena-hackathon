@@ -1,0 +1,10 @@
+---
+title: Cryto Whisperer Architecture
+---
+graph TD;
+    Claude["Claude Desktop"]-->|"get sentiment"|Masa["Masa CP Server"];
+    Claude-->|"get signals"|TM["TokenMetrics MCP Server"];
+    Claude-->|"trade"|BinanceUS["Binance US MCP Server"];
+    Masa-->MasaAPI["Masa Readtime Data API"];
+    TM-->TMAPI["Token Metrics API"];
+    BinanceUS-->BinanceAPI["Binance US API"];
