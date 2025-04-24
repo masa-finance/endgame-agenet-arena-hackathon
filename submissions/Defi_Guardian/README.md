@@ -1,4 +1,3 @@
-```markdown
 # DeFi Portfolio Guardian Agent
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -89,19 +88,14 @@ pip install -r requirements.txt
 # Set environment variables
 echo "MASA_API_KEY=your_api_key_here" > .env
 
-# Start MCP server (in separate terminal)
-python mcp_defi_server.py
+# Start MCP Server (in separate terminal)
+python Defi_Server.py
 
 # Launch client interface
-streamlit run defi_agent_client.py
+streamlit run Defi_Client.py
 ```
 
-### Subnet 59 Deployment
 
-1. Package agent in Docker container
-2. Register with Agent Arena using SN59 SDK
-3. Configure Bittensor wallet for incentive rewards
-4. Deploy via Kubernetes cluster (helm chart provided)
 
 ## 📂 Repository Structure
 
@@ -110,7 +104,6 @@ defi-guardian-agent/
 ├── Defi_Server.py       # MCP server implementation
 ├── Defi_Client.py     # Streamlit client UI
 ├── requirements.txt         # Dependency list
-├── Dockerfile               # Containerization config
 ├── LICENSE
 └── README.md
 ```
