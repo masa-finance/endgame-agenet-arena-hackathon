@@ -1,0 +1,6 @@
+httpx
+mcp[cli]
+asyncio
+requests
+pydantic
+ccxt
